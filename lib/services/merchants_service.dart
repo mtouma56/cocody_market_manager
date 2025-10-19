@@ -103,15 +103,33 @@ class MerchantsService {
   Future<Map<String, dynamic>> addMerchant(
       Map<String, dynamic> merchantData) async {
     try {
+      // Préparer les données en gérant les champs optionnels
+      final Map<String, dynamic> insertData = {
+        'nom': merchantData['name'],
+        'activite': merchantData['businessType'],
+        'contact': merchantData['phone'],
+      };
+
+      // Ajouter l'email seulement s'il n'est pas vide
+      final email = merchantData['email']?.toString().trim();
+      if (email != null && email.isNotEmpty) {
+        insertData['email'] = email;
+      }
+
+      // Ajouter l'adresse seulement si elle n'est pas vide
+      final address = merchantData['address']?.toString().trim();
+      if (address != null && address.isNotEmpty) {
+        insertData['adresse'] = address;
+      }
+
+      // Ajouter la photo si fournie
+      if (merchantData['profilePhoto'] != null) {
+        insertData['photo_url'] = merchantData['profilePhoto'];
+      }
+
       final response = await _supabase
           .from('commercants')
-          .insert({
-            'nom': merchantData['name'],
-            'activite': merchantData['businessType'],
-            'contact': merchantData['phone'],
-            'email': merchantData['email'],
-            'photo_url': merchantData['profilePhoto'],
-          })
+          .insert(insertData)
           .select()
           .single();
 
@@ -119,6 +137,15 @@ class MerchantsService {
       return response;
     } catch (error) {
       print('❌ ERREUR addMerchant: $error');
+
+      // Fournir des messages d'erreur plus spécifiques
+      if (error.toString().contains('commercants_email_unique_when_present')) {
+        throw Exception(
+            'Cette adresse email est déjà utilisée par un autre commerçant');
+      } else if (error.toString().contains('not-null constraint')) {
+        throw Exception('Veuillez remplir tous les champs obligatoires');
+      }
+
       throw Exception('Erreur lors de l\'ajout du commerçant: $error');
     }
   }
@@ -164,12 +191,12 @@ class MerchantsService {
     }
 
     // Vérifier si il y a un bail actif
-    bool hasActiveLease = baux.any((bail) => bail['statut'] == 'Actif');
+    bool hasActiveLease = baux.any((bail) => bail?['statut'] == 'Actif');
     if (hasActiveLease) return 'active';
 
     // Vérifier si il y a un bail qui expire bientôt
     bool hasExpiringLease =
-        baux.any((bail) => bail['statut'] == 'Expire bientôt');
+        baux.any((bail) => bail?['statut'] == 'Expire bientôt');
     if (hasExpiringLease) return 'expiring';
 
     // Sinon, statut basé sur le dernier bail
@@ -177,8 +204,9 @@ class MerchantsService {
   }
 
   /// Convertit le nom du type de local de Supabase en code
-  String _getPropertyTypeFromSupabase(String typeName) {
-    switch (typeName) {
+  String _getPropertyTypeFromSupabase(String? typeName) {
+    final safeTypeName = typeName ?? '';
+    switch (safeTypeName) {
       case 'Boutique 9m²':
         return 'shop';
       case 'Boutique 4.5m²':
@@ -197,8 +225,9 @@ class MerchantsService {
   }
 
   /// Convertit l'ordre d'étage en nom d'étage
-  String _getFloorName(int ordre) {
-    switch (ordre) {
+  String _getFloorName(int? ordre) {
+    final safeOrdre = ordre ?? 0;
+    switch (safeOrdre) {
       case 0:
         return 'Rez-de-chaussée';
       case 1:
@@ -213,7 +242,9 @@ class MerchantsService {
   }
 
   /// Génère des notes automatiques pour le commerçant
-  String _generateNotes(Map<String, dynamic> commercant, String status) {
+  String _generateNotes(Map<String, dynamic>? commercant, String status) {
+    if (commercant == null) return 'Données commercant non disponibles';
+
     switch (status) {
       case 'active':
         return 'Commerçant actif avec bail en cours';

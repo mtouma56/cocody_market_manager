@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:sizer/sizer.dart';
 
 import '../../../core/app_export.dart';
+import '../../../services/merchants_service.dart';
 
 class AddMerchantBottomSheetWidget extends StatefulWidget {
   final ValueChanged<Map<String, dynamic>>? onMerchantAdded;
@@ -25,6 +26,9 @@ class _AddMerchantBottomSheetWidgetState
   final _emailController = TextEditingController();
   final _addressController = TextEditingController();
   final _notesController = TextEditingController();
+
+  final MerchantsService _merchantsService = MerchantsService();
+  bool _isLoading = false;
 
   String _selectedPropertyType = 'Boutique 9m²';
   String _selectedFloor = 'Rez-de-chaussée';
@@ -169,12 +173,12 @@ class _AddMerchantBottomSheetWidgetState
 
                     _buildTextField(
                       controller: _emailController,
-                      label: 'Email',
+                      label: 'Email (optionnel)',
                       hint: 'exemple@email.com',
                       keyboardType: TextInputType.emailAddress,
                       validator: (value) {
                         if (value != null && value.isNotEmpty) {
-                          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}\$')
+                          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
                               .hasMatch(value)) {
                             return 'Format d\'email invalide';
                           }
@@ -186,54 +190,37 @@ class _AddMerchantBottomSheetWidgetState
 
                     _buildTextField(
                       controller: _addressController,
-                      label: 'Adresse',
+                      label: 'Adresse (optionnelle)',
                       hint: 'Adresse du commerçant',
                       maxLines: 2,
                     ),
                     SizedBox(height: 3.h),
 
-                    // Property Assignment Section
-                    _buildSectionHeader(context, 'Attribution de propriété'),
-                    SizedBox(height: 2.h),
-
-                    _buildDropdownField(
-                      label: 'Type de propriété *',
-                      value: _selectedPropertyType,
-                      items: _propertyTypes,
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedPropertyType = value!;
-                          _selectedPropertyNumber = ''; // Reset property number
-                        });
-                      },
-                    ),
-                    SizedBox(height: 2.h),
-
-                    _buildDropdownField(
-                      label: 'Étage *',
-                      value: _selectedFloor,
-                      items: _floors,
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedFloor = value!;
-                          _selectedPropertyNumber = ''; // Reset property number
-                        });
-                      },
-                    ),
-                    SizedBox(height: 2.h),
-
-                    _buildTextField(
-                      controller:
-                          TextEditingController(text: _selectedPropertyNumber),
-                      label: 'Numéro de propriété *',
-                      hint: 'Ex: A-001, B-205...',
-                      onChanged: (value) => _selectedPropertyNumber = value,
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Le numéro de propriété est obligatoire';
-                        }
-                        return null;
-                      },
+                    // Note: Pas d'attribution de local à la création
+                    Container(
+                      padding: EdgeInsets.all(3.w),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: colorScheme.primary,
+                            size: 20,
+                          ),
+                          SizedBox(width: 2.w),
+                          Expanded(
+                            child: Text(
+                              'Note: Le local sera attribué lors de la création du bail',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     SizedBox(height: 3.h),
 
@@ -271,7 +258,7 @@ class _AddMerchantBottomSheetWidgetState
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: _isLoading ? null : () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
                       padding: EdgeInsets.symmetric(vertical: 1.5.h),
                       shape: RoundedRectangleBorder(
@@ -284,14 +271,23 @@ class _AddMerchantBottomSheetWidgetState
                 SizedBox(width: 4.w),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _saveMerchant,
+                    onPressed: _isLoading ? null : _saveMerchant,
                     style: ElevatedButton.styleFrom(
                       padding: EdgeInsets.symmetric(vertical: 1.5.h),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text('Enregistrer'),
+                    child: _isLoading
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colorScheme.onPrimary,
+                            ),
+                          )
+                        : const Text('Enregistrer'),
                   ),
                 ),
               ],
@@ -391,35 +387,71 @@ class _AddMerchantBottomSheetWidgetState
     );
   }
 
-  void _saveMerchant() {
+  Future<void> _saveMerchant() async {
     if (_formKey.currentState!.validate()) {
-      final merchantData = {
-        'id': DateTime.now().millisecondsSinceEpoch,
-        'name': _nameController.text.trim(),
-        'businessType': _businessTypeController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'email': _emailController.text.trim(),
-        'address': _addressController.text.trim(),
-        'notes': _notesController.text.trim(),
-        'propertyType': _selectedPropertyType,
-        'floor': _selectedFloor,
-        'propertyNumber': _selectedPropertyNumber,
-        'status': 'active',
-        'createdAt': DateTime.now().toIso8601String(),
-        'profilePhoto': null,
-        'profilePhotoSemanticLabel': null,
-      };
+      setState(() {
+        _isLoading = true;
+      });
 
-      widget.onMerchantAdded?.call(merchantData);
-      Navigator.pop(context);
+      try {
+        // Préparer les données pour Supabase
+        final merchantData = {
+          'name': _nameController.text.trim(),
+          'businessType': _businessTypeController.text.trim(),
+          'phone': _phoneController.text.trim(),
+          'profilePhoto':
+              'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=400',
+        };
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text('Commerçant "${merchantData['name']}" ajouté avec succès'),
-          backgroundColor: AppTheme.primaryGreen,
-        ),
-      );
+        // Ajouter l'email seulement s'il n'est pas vide
+        final emailText = _emailController.text.trim();
+        if (emailText.isNotEmpty) {
+          merchantData['email'] = emailText;
+        }
+
+        // Ajouter l'adresse seulement si elle n'est pas vide
+        final addressText = _addressController.text.trim();
+        if (addressText.isNotEmpty) {
+          merchantData['address'] = addressText;
+        }
+
+        // Créer le commerçant dans Supabase
+        final result = await _merchantsService.addMerchant(merchantData);
+
+        // Appeler le callback pour rafraîchir la liste
+        widget.onMerchantAdded?.call(result);
+
+        // Fermer la modal
+        if (mounted) {
+          Navigator.pop(context);
+
+          // Afficher un message de succès
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text('Commerçant "${merchantData['name']}" créé avec succès'),
+              backgroundColor: AppTheme.primaryGreen,
+            ),
+          );
+        }
+      } catch (error) {
+        print('❌ ERREUR création commerçant: $error');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur lors de la création: ${error.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
     }
   }
 }

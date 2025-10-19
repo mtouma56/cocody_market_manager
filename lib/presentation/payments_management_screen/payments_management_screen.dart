@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sizer/sizer.dart';
 
-import '../../core/app_export.dart';
 import '../../services/payments_service.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/custom_bottom_bar.dart';
-import './widgets/new_payment_dialog.dart';
-import './widgets/payment_card.dart';
-import './widgets/payment_metrics_card.dart';
-import './widgets/payment_search_bar.dart';
-import './widgets/payment_status_filter.dart';
 
 class PaymentsManagementScreen extends StatefulWidget {
   const PaymentsManagementScreen({super.key});
@@ -20,15 +15,14 @@ class PaymentsManagementScreen extends StatefulWidget {
 }
 
 class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String _selectedStatus = 'all';
   String _searchQuery = '';
-  bool _isLoading = true;
-  String? _error;
-
+  final TextEditingController _searchController = TextEditingController();
+  bool _isSearchActive = false;
   List<Map<String, dynamic>> _payments = [];
   List<Map<String, dynamic>> _filteredPayments = [];
-  Map<String, dynamic> _metrics = {};
+  bool _isLoading = true;
+  String? _error;
 
   final PaymentsService _paymentsService = PaymentsService();
 
@@ -38,7 +32,12 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
     _loadPayments();
   }
 
-  /// Charge les paiements depuis Supabase
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadPayments() async {
     try {
       setState(() {
@@ -47,77 +46,315 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
       });
 
       final payments = await _paymentsService.getAllPayments();
-      final metrics = await _paymentsService.getPaymentMetrics();
 
-      setState(() {
-        _payments = payments;
-        _metrics = metrics;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _payments = payments ?? [];
+          _isLoading = false;
+        });
 
-      _applyFilters();
+        _filterPayments();
+      }
     } catch (error) {
-      setState(() {
-        _error = error.toString();
-        _isLoading = false;
-      });
+      print('❌ ERREUR _loadPayments: $error');
+      if (mounted) {
+        setState(() {
+          _error = error.toString();
+          _isLoading = false;
+          _payments = [];
+        });
+      }
     }
   }
 
-  void _applyFilters() {
+  void _filterPayments() {
     setState(() {
       _filteredPayments = _payments.where((payment) {
         // Status filter
-        if (_selectedStatus != 'all' && payment['status'] != _selectedStatus) {
-          return false;
-        }
+        bool statusMatch = _selectedStatus == 'all' ||
+            (payment['status']?.toString() ?? '') == _selectedStatus;
 
         // Search filter
-        if (_searchQuery.isNotEmpty) {
-          final merchantName =
-              (payment['merchantName'] as String).toLowerCase();
-          final propertyNumber =
-              (payment['propertyNumber'] as String).toLowerCase();
-          final amount = (payment['amount'] as String).toLowerCase();
-          final query = _searchQuery.toLowerCase();
+        bool searchMatch = _searchQuery.isEmpty ||
+            (payment['tenantName']?.toString() ?? '').toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                ) ||
+            (payment['contractNumber']?.toString() ?? '')
+                .toLowerCase()
+                .contains(
+                  _searchQuery.toLowerCase(),
+                ) ||
+            (payment['propertyNumber']?.toString() ?? '')
+                .toLowerCase()
+                .contains(
+                  _searchQuery.toLowerCase(),
+                );
 
-          return merchantName.contains(query) ||
-              propertyNumber.contains(query) ||
-              amount.contains(query);
+        return statusMatch && searchMatch;
+      }).toList();
+
+      // Sort by urgency then by due date
+      _filteredPayments.sort((a, b) {
+        const urgencyOrder = {'high': 0, 'medium': 1, 'low': 2};
+        int urgencyA = urgencyOrder[a['urgency']?.toString()] ?? 2;
+        int urgencyB = urgencyOrder[b['urgency']?.toString()] ?? 2;
+
+        if (urgencyA != urgencyB) {
+          return urgencyA.compareTo(urgencyB);
         }
 
-        return true;
-      }).toList();
+        try {
+          DateTime dateA = DateTime.parse(a['dueDate']?.toString() ?? '');
+          DateTime dateB = DateTime.parse(b['dueDate']?.toString() ?? '');
+          return dateA.compareTo(dateB);
+        } catch (e) {
+          return 0;
+        }
+      });
     });
   }
 
-  List<Map<String, dynamic>> get _statusFilters {
-    return [
-      {
-        'status': 'all',
-        'label': 'Tous',
-        'count': _payments.length,
-        'color': AppTheme.neutralMedium,
-      },
-      {
-        'status': 'paid',
-        'label': 'Payés',
-        'count': _payments.where((p) => p['status'] == 'paid').length,
-        'color': AppTheme.primaryGreen,
-      },
-      {
-        'status': 'pending',
-        'label': 'En attente',
-        'count': _payments.where((p) => p['status'] == 'pending').length,
-        'color': AppTheme.warningAccent,
-      },
-      {
-        'status': 'overdue',
-        'label': 'En retard',
-        'count': _payments.where((p) => p['status'] == 'overdue').length,
-        'color': AppTheme.alertRed,
-      },
-    ];
+  void _onStatusFilterChanged(String status) {
+    setState(() {
+      _selectedStatus = status;
+    });
+    _filterPayments();
+    HapticFeedback.lightImpact();
+  }
+
+  void _onSearchChanged(String query) {
+    setState(() {
+      _searchQuery = query;
+    });
+    _filterPayments();
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _isSearchActive = !_isSearchActive;
+      if (!_isSearchActive) {
+        _searchController.clear();
+        _searchQuery = '';
+        _filterPayments();
+      }
+    });
+    HapticFeedback.lightImpact();
+  }
+
+  void _onPaymentTap(Map<String, dynamic> payment) {
+    HapticFeedback.lightImpact();
+    _showPaymentDetails(payment);
+  }
+
+  void _showPaymentDetails(Map<String, dynamic> payment) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Paiement ${payment['monthConcerned'] ?? 'N/A'}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Locataire: ${payment['tenantName'] ?? 'N/A'}'),
+            Text('Activité: ${payment['tenantBusiness'] ?? 'N/A'}'),
+            Text(
+                'Local: ${payment['propertyNumber'] ?? 'N/A'} (${payment['propertyFloor'] ?? 'N/A'})'),
+            Text(
+                'Montant: ${_formatAmount((payment['amount'] as num?)?.toDouble() ?? 0)} FCFA'),
+            Text(
+                'Échéance: ${_formatDate(payment['dueDate']?.toString() ?? '')}'),
+            if (payment['paymentDate'] != null)
+              Text(
+                  'Payé le: ${_formatDate(payment['paymentDate']?.toString() ?? '')}'),
+            if (payment['paymentMethod'] != null)
+              Text(
+                  'Mode: ${_getPaymentMethodLabel(payment['paymentMethod']?.toString())}'),
+            Text('Statut: ${_getStatusLabel(payment['status']?.toString())}'),
+            Text('Contrat: ${payment['contractNumber'] ?? 'N/A'}'),
+            if (payment['notes']?.toString().isNotEmpty == true)
+              Text('Notes: ${payment['notes']}'),
+            if (payment['tenantPhone']?.toString().isNotEmpty == true)
+              Text('Téléphone: ${payment['tenantPhone']}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fermer'),
+          ),
+          if (payment['status'] == 'pending' || payment['status'] == 'overdue')
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _markAsPaid(payment);
+              },
+              child: const Text('Marquer payé'),
+            ),
+          if (payment['tenantPhone']?.toString().isNotEmpty == true)
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _callTenant(payment['tenantPhone']?.toString() ?? '');
+              },
+              child: const Text('Appeler'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _markAsPaid(Map<String, dynamic> payment) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmer le paiement'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Marquer comme payé le paiement de ${_formatAmount((payment['amount'] as num?)?.toDouble() ?? 0)} FCFA pour ${payment['tenantName'] ?? 'N/A'} ?',
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(
+                labelText: 'Mode de paiement',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'cash', child: Text('Espèces')),
+                DropdownMenuItem(value: 'transfer', child: Text('Virement')),
+                DropdownMenuItem(
+                    value: 'mobile_money', child: Text('Mobile Money')),
+                DropdownMenuItem(value: 'check', child: Text('Chèque')),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  _updatePaymentStatus(
+                      payment['id']?.toString() ?? '', 'paid', value);
+                  Navigator.pop(context);
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updatePaymentStatus(
+    String paymentId,
+    String status,
+    String? paymentMethod,
+  ) async {
+    try {
+      await _paymentsService.updatePaymentStatus(
+        paymentId,
+        status,
+        paymentMethod: paymentMethod,
+      );
+
+      await _loadPayments(); // Reload data
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Statut mis à jour avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: ${error.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _callTenant(String phoneNumber) {
+    HapticFeedback.lightImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Appel de $phoneNumber'),
+        action: SnackBarAction(label: 'OK', onPressed: () {}),
+      ),
+    );
+  }
+
+  void _showNewPaymentDialog() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Fonctionnalité en cours de développement'),
+      ),
+    );
+  }
+
+  String _formatAmount(double amount) {
+    return amount.toStringAsFixed(0).replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (Match m) => '${m[1]} ',
+        );
+  }
+
+  String _formatDate(String dateStr) {
+    try {
+      if (dateStr.isEmpty) return 'N/A';
+      DateTime date = DateTime.parse(dateStr);
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
+  String _getStatusLabel(String? status) {
+    switch (status) {
+      case 'paid':
+        return 'Payé';
+      case 'pending':
+        return 'En attente';
+      case 'overdue':
+        return 'En retard';
+      default:
+        return 'Inconnu';
+    }
+  }
+
+  String _getPaymentMethodLabel(String? method) {
+    switch (method) {
+      case 'cash':
+        return 'Espèces';
+      case 'transfer':
+        return 'Virement';
+      case 'mobile_money':
+        return 'Mobile Money';
+      case 'check':
+        return 'Chèque';
+      default:
+        return 'Non spécifié';
+    }
+  }
+
+  Future<void> _onRefresh() async {
+    HapticFeedback.mediumImpact();
+    await _loadPayments();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Données mises à jour'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
   }
 
   Widget _buildLoadingState() {
@@ -138,23 +375,23 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CustomIconWidget(
-            iconName: 'error',
-            color: AppTheme.lightTheme.colorScheme.error,
+          Icon(
+            Icons.error_outline,
+            color: Colors.red,
             size: 64,
           ),
           SizedBox(height: 2.h),
           Text(
             'Erreur de chargement',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppTheme.lightTheme.colorScheme.error,
+                  color: Colors.red,
                 ),
           ),
           SizedBox(height: 1.h),
           Text(
             _error ?? 'Une erreur est survenue',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
+                  color: Colors.grey[600],
                 ),
             textAlign: TextAlign.center,
           ),
@@ -168,117 +405,540 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
     );
   }
 
+  Widget _buildMetricsCards() {
+    final metrics = _calculateMetrics();
+
+    return Container(
+      padding: EdgeInsets.all(4.w),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildMetricCard(
+              'Total',
+              '${metrics['totalCount']}',
+              'Paiements',
+              Colors.blue,
+              Icons.payment,
+            ),
+          ),
+          SizedBox(width: 2.w),
+          Expanded(
+            child: _buildMetricCard(
+              'En attente',
+              '${metrics['pendingCount']}',
+              '${_formatAmount(metrics['pendingAmount'])} FCFA',
+              Colors.orange,
+              Icons.schedule,
+            ),
+          ),
+          SizedBox(width: 2.w),
+          Expanded(
+            child: _buildMetricCard(
+              'Payés',
+              '${metrics['paidCount']}',
+              '${_formatAmount(metrics['paidAmount'])} FCFA',
+              Colors.green,
+              Icons.check_circle,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(
+      String title, String count, String subtitle, Color color, IconData icon) {
+    return Container(
+      padding: EdgeInsets.all(3.w),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: Colors.white, size: 20),
+          SizedBox(height: 1.h),
+          Text(
+            count,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+            ),
+          ),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 10,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusFilterChips() {
+    final statuses = [
+      {'code': 'all', 'label': 'Tous'},
+      {'code': 'pending', 'label': 'En attente'},
+      {'code': 'paid', 'label': 'Payés'},
+      {'code': 'overdue', 'label': 'En retard'},
+    ];
+
+    return Container(
+      padding: EdgeInsets.all(2.w),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: statuses.map((status) {
+            final isSelected = _selectedStatus == status['code'];
+            return Padding(
+              padding: EdgeInsets.only(right: 2.w),
+              child: FilterChip(
+                label: Text(status['label'] ?? ''),
+                selected: isSelected,
+                onSelected: (_) => _onStatusFilterChanged(status['code'] ?? ''),
+                backgroundColor: Colors.grey[200],
+                selectedColor: Theme.of(context).primaryColor,
+                labelStyle: TextStyle(
+                  color: isSelected ? Colors.white : Colors.black87,
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentCard(Map<String, dynamic> payment) {
+    final urgencyColor = _getUrgencyColor(payment['urgency']?.toString());
+    final statusColor = _getStatusColor(payment['status']?.toString());
+
+    return Card(
+      margin: EdgeInsets.symmetric(horizontal: 4.w, vertical: 1.h),
+      elevation: 2,
+      child: InkWell(
+        onTap: () => _onPaymentTap(payment),
+        child: Padding(
+          padding: EdgeInsets.all(4.w),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header with month and urgency
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Paiement ${payment['monthConcerned'] ?? 'N/A'}',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  Container(
+                    padding:
+                        EdgeInsets.symmetric(horizontal: 2.w, vertical: 0.5.h),
+                    decoration: BoxDecoration(
+                      color: urgencyColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _getUrgencyLabel(payment['urgency']?.toString()),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 2.w),
+
+              // Tenant info
+              Row(
+                children: [
+                  Icon(Icons.person, size: 16, color: Colors.grey[600]),
+                  SizedBox(width: 1.w),
+                  Expanded(
+                    child: Text(
+                      payment['tenantName']?.toString() ?? 'N/A',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 1.w),
+
+              // Property info
+              Row(
+                children: [
+                  Icon(Icons.business, size: 16, color: Colors.grey[600]),
+                  SizedBox(width: 1.w),
+                  Text(
+                    'Local ${payment['propertyNumber'] ?? 'N/A'} • ${payment['tenantBusiness'] ?? 'N/A'}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+              SizedBox(height: 1.w),
+
+              // Amount and status
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${_formatAmount((payment['amount'] as num?)?.toDouble() ?? 0)} FCFA',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).primaryColor,
+                        ),
+                  ),
+                  Container(
+                    padding:
+                        EdgeInsets.symmetric(horizontal: 2.w, vertical: 0.5.h),
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _getStatusLabel(payment['status']?.toString()),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 1.w),
+
+              // Dates
+              Text(
+                'Échéance: ${_formatDate(payment['dueDate']?.toString() ?? '')}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[600],
+                    ),
+              ),
+              if (payment['paymentDate'] != null)
+                Text(
+                  'Payé le: ${_formatDate(payment['paymentDate']?.toString() ?? '')}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.green[600],
+                      ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _calculateMetrics() {
+    double totalAmount = 0;
+    double paidAmount = 0;
+    double pendingAmount = 0;
+    double overdueAmount = 0;
+    int totalCount = _payments.length;
+    int paidCount = 0;
+    int pendingCount = 0;
+    int overdueCount = 0;
+
+    for (var payment in _payments) {
+      final amount = (payment['amount'] as num?)?.toDouble() ?? 0;
+      final status = payment['status']?.toString() ?? '';
+
+      totalAmount += amount;
+
+      switch (status) {
+        case 'paid':
+          paidAmount += amount;
+          paidCount++;
+          break;
+        case 'pending':
+          pendingAmount += amount;
+          pendingCount++;
+          break;
+        case 'overdue':
+          overdueAmount += amount;
+          overdueCount++;
+          break;
+      }
+    }
+
+    return {
+      'totalAmount': totalAmount,
+      'paidAmount': paidAmount,
+      'pendingAmount': pendingAmount,
+      'overdueAmount': overdueAmount,
+      'totalCount': totalCount,
+      'paidCount': paidCount,
+      'pendingCount': pendingCount,
+      'overdueCount': overdueCount,
+    };
+  }
+
+  Color _getUrgencyColor(String? urgency) {
+    switch (urgency) {
+      case 'high':
+        return Colors.red;
+      case 'medium':
+        return Colors.orange;
+      default:
+        return Colors.green;
+    }
+  }
+
+  String _getUrgencyLabel(String? urgency) {
+    switch (urgency) {
+      case 'high':
+        return 'URGENT';
+      case 'medium':
+        return 'ATTENTION';
+      default:
+        return 'OK';
+    }
+  }
+
+  Color _getStatusColor(String? status) {
+    switch (status) {
+      case 'paid':
+        return Colors.green;
+      case 'pending':
+        return Colors.orange;
+      case 'overdue':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: AppTheme.lightTheme.scaffoldBackgroundColor,
-      drawer: _buildDrawer(),
-      appBar: CustomAppBar(
-        title: 'Paiements',
-        variant: CustomAppBarVariant.withActions,
-        actions: [
-          IconButton(
-            icon: CustomIconWidget(
-              iconName: 'add',
-              color: AppTheme.lightTheme.colorScheme.onSurface,
-              size: 6.w,
-            ),
-            onPressed: _showNewPaymentDialog,
-            tooltip: 'Nouveau paiement',
-          ),
-          IconButton(
-            icon: CustomIconWidget(
-              iconName: 'file_download',
-              color: AppTheme.lightTheme.colorScheme.onSurface,
-              size: 6.w,
-            ),
-            onPressed: _exportPayments,
-            tooltip: 'Exporter',
-          ),
-          PopupMenuButton<String>(
-            icon: CustomIconWidget(
-              iconName: 'more_vert',
-              color: AppTheme.lightTheme.colorScheme.onSurface,
-              size: 6.w,
-            ),
-            onSelected: _handleMenuSelection,
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'settings',
-                child: ListTile(
-                  leading: Icon(Icons.settings),
-                  title: Text('Paramètres'),
-                  contentPadding: EdgeInsets.zero,
-                ),
+      backgroundColor: Colors.grey[50],
+      appBar: _isSearchActive
+          ? AppBar(
+              backgroundColor: Colors.white,
+              elevation: 1,
+              leading: IconButton(
+                onPressed: _toggleSearch,
+                icon: const Icon(Icons.arrow_back, color: Colors.black87),
               ),
-              const PopupMenuItem(
-                value: 'help',
-                child: ListTile(
-                  leading: Icon(Icons.help_outline),
-                  title: Text('Aide'),
-                  contentPadding: EdgeInsets.zero,
+              title: TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Rechercher paiements...',
+                  border: InputBorder.none,
                 ),
+                onChanged: _onSearchChanged,
               ),
-            ],
-          ),
-        ],
+              actions: [
+                if (_searchController.text.isNotEmpty)
+                  IconButton(
+                    onPressed: () {
+                      _searchController.clear();
+                      _onSearchChanged('');
+                    },
+                    icon: const Icon(Icons.clear, color: Colors.black87),
+                  ),
+              ],
+            )
+          : CustomAppBar(
+              title: 'Paiements',
+              variant: CustomAppBarVariant.withActions,
+              onSearchPressed: _toggleSearch,
+            ),
+      drawer: Drawer(
+        backgroundColor: Colors.white,
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.payment,
+                    color: Colors.white,
+                    size: 40,
+                  ),
+                  SizedBox(height: 1.h),
+                  Text(
+                    'Cocody Market Manager',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  Text(
+                    'Gestion des paiements',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.white70,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.dashboard),
+              title: const Text('Tableau de bord'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/dashboard-screen');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.business),
+              title: const Text('Locaux'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/properties-management-screen');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.store),
+              title: const Text('Commerçants'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/merchants-management-screen');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.description),
+              title: const Text('Baux'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/lease-management-screen');
+              },
+            ),
+            ListTile(
+              leading:
+                  Icon(Icons.payment, color: Theme.of(context).primaryColor),
+              title: const Text('Paiements'),
+              selected: true,
+              selectedTileColor: Theme.of(context).primaryColor.withAlpha(26),
+              onTap: () => Navigator.pop(context),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Paramètres'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/settings-screen');
+              },
+            ),
+          ],
+        ),
       ),
       body: _isLoading
           ? _buildLoadingState()
           : _error != null
               ? _buildErrorState()
               : RefreshIndicator(
-                  onRefresh: _refreshPayments,
+                  onRefresh: _onRefresh,
+                  color: Theme.of(context).primaryColor,
                   child: Column(
                     children: [
-                      _buildMetricsSection(),
-                      SizedBox(height: 2.h),
-                      PaymentStatusFilter(
-                        statusFilters: _statusFilters,
-                        selectedStatus: _selectedStatus,
-                        onStatusChanged: (status) {
-                          setState(() {
-                            _selectedStatus = status;
-                          });
-                          _applyFilters();
-                        },
+                      // Metrics cards
+                      _buildMetricsCards(),
+
+                      // Status filter chips
+                      _buildStatusFilterChips(),
+
+                      // Payments count
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 4.w, vertical: 1.h),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '${_filteredPayments.length} paiement${_filteredPayments.length > 1 ? 's' : ''} trouvé${_filteredPayments.length > 1 ? 's' : ''}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: Colors.grey[600],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                            ),
+                            if (_selectedStatus != 'all' ||
+                                _searchQuery.isNotEmpty)
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedStatus = 'all';
+                                    _searchQuery = '';
+                                    _searchController.clear();
+                                  });
+                                  _filterPayments();
+                                },
+                                child: const Text('Effacer filtres'),
+                              ),
+                          ],
+                        ),
                       ),
-                      SizedBox(height: 1.h),
-                      PaymentSearchBar(
-                        searchQuery: _searchQuery,
-                        onSearchChanged: (query) {
-                          setState(() {
-                            _searchQuery = query;
-                          });
-                          _applyFilters();
-                        },
-                        onFilterPressed: _showFilterDialog,
-                      ),
+
+                      // Payments list
                       Expanded(
                         child: _filteredPayments.isEmpty
-                            ? _buildEmptyState()
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.search_off,
+                                      color: Colors.grey[400],
+                                      size: 64,
+                                    ),
+                                    SizedBox(height: 2.h),
+                                    Text(
+                                      'Aucun paiement trouvé',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            color: Colors.grey[600],
+                                          ),
+                                    ),
+                                    SizedBox(height: 1.h),
+                                    Text(
+                                      'Essayez de modifier vos filtres',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            color: Colors.grey[500],
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              )
                             : ListView.builder(
-                                padding: EdgeInsets.only(bottom: 2.h),
+                                padding: EdgeInsets.only(bottom: 2.w),
                                 itemCount: _filteredPayments.length,
                                 itemBuilder: (context, index) {
                                   final payment = _filteredPayments[index];
-                                  return PaymentCard(
-                                    payment: payment,
-                                    onTap: () => _showPaymentDetails(payment),
-                                    onRecordPayment: () =>
-                                        _recordPayment(payment),
-                                    onSendReminder: () =>
-                                        _sendReminder(payment),
-                                    onViewHistory: () =>
-                                        _viewPaymentHistory(payment),
-                                    onGenerateReceipt: () =>
-                                        _generateReceipt(payment),
-                                    onEditAmount: () =>
-                                        _editPaymentAmount(payment),
-                                    onMarkDisputed: () =>
-                                        _markAsDisputed(payment),
-                                  );
+                                  return _buildPaymentCard(payment);
                                 },
                               ),
                       ),
@@ -287,573 +947,13 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
                 ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showNewPaymentDialog,
-        backgroundColor: AppTheme.primaryGreen,
-        child: CustomIconWidget(
-          iconName: 'add',
-          color: AppTheme.surfaceWhite,
-          size: 6.w,
-        ),
+        backgroundColor: Theme.of(context).primaryColor,
+        child: const Icon(Icons.add, color: Colors.white),
       ),
       bottomNavigationBar: const CustomBottomBar(
         currentIndex: 4,
         variant: CustomBottomBarVariant.standard,
       ),
     );
-  }
-
-  Widget _buildDrawer() {
-    return Drawer(
-      backgroundColor: AppTheme.lightTheme.colorScheme.surface,
-      child: Column(
-        children: [
-          DrawerHeader(
-            decoration: BoxDecoration(
-              color: AppTheme.primaryGreen.withValues(alpha: 0.1),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CustomIconWidget(
-                  iconName: 'store',
-                  color: AppTheme.primaryGreen,
-                  size: 12.w,
-                ),
-                SizedBox(height: 2.h),
-                Text(
-                  'Cocody Market Manager',
-                  style: GoogleFonts.roboto(
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.lightTheme.colorScheme.onSurface,
-                  ),
-                ),
-                Text(
-                  'Gestion des paiements',
-                  style: GoogleFonts.roboto(
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w400,
-                    color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                _buildDrawerItem('Dashboard', 'dashboard', '/dashboard-screen'),
-                _buildDrawerItem(
-                    'Locaux', 'business', '/properties-management-screen'),
-                _buildDrawerItem(
-                    'Commerçants', 'store', '/merchants-management-screen'),
-                _buildDrawerItem(
-                    'Baux', 'description', '/lease-management-screen'),
-                _buildDrawerItem(
-                    'Paiements', 'payment', '/payments-management-screen',
-                    isSelected: true),
-                _buildDrawerItem('Paramètres', 'settings', '/settings-screen'),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDrawerItem(String title, String iconName, String route,
-      {bool isSelected = false}) {
-    return ListTile(
-      leading: CustomIconWidget(
-        iconName: iconName,
-        color: isSelected
-            ? AppTheme.primaryGreen
-            : AppTheme.lightTheme.colorScheme.onSurfaceVariant,
-        size: 6.w,
-      ),
-      title: Text(
-        title,
-        style: GoogleFonts.roboto(
-          fontSize: 14.sp,
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-          color: isSelected
-              ? AppTheme.primaryGreen
-              : AppTheme.lightTheme.colorScheme.onSurface,
-        ),
-      ),
-      selected: isSelected,
-      selectedTileColor: AppTheme.primaryGreen.withValues(alpha: 0.1),
-      onTap: () {
-        Navigator.pop(context);
-        if (!isSelected) {
-          Navigator.pushNamedAndRemoveUntil(context, route, (route) => false);
-        }
-      },
-    );
-  }
-
-  Widget _buildMetricsSection() {
-    if (_metrics.isEmpty) return const SizedBox.shrink();
-
-    final totalCollected = _metrics['totalCollected'] ?? 0;
-    final totalPending = _metrics['totalPending'] ?? 0;
-    final totalOverdue = _metrics['totalOverdue'] ?? 0;
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 2.h),
-      child: Row(
-        children: [
-          Expanded(
-            child: PaymentMetricsCard(
-              title: 'Collecté ce mois',
-              amount: '${(totalCollected / 1000000).toStringAsFixed(1)}M FCFA',
-              subtitle: '${_metrics['paidCount'] ?? 0} paiements',
-              backgroundColor: AppTheme.primaryGreen.withValues(alpha: 0.1),
-              textColor: AppTheme.primaryGreen,
-              icon: Icons.trending_up,
-            ),
-          ),
-          SizedBox(width: 3.w),
-          Expanded(
-            child: PaymentMetricsCard(
-              title: 'En attente',
-              amount: '${(totalPending / 1000000).toStringAsFixed(1)}M FCFA',
-              subtitle: '${_metrics['pendingCount'] ?? 0} paiements',
-              backgroundColor: AppTheme.warningAccent.withValues(alpha: 0.1),
-              textColor: AppTheme.warningAccent,
-              icon: Icons.schedule,
-            ),
-          ),
-          SizedBox(width: 3.w),
-          Expanded(
-            child: PaymentMetricsCard(
-              title: 'En retard',
-              amount: '${(totalOverdue / 1000000).toStringAsFixed(1)}M FCFA',
-              subtitle: '${_metrics['overdueCount'] ?? 0} paiements',
-              backgroundColor: AppTheme.alertRed.withValues(alpha: 0.1),
-              textColor: AppTheme.alertRed,
-              icon: Icons.error,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CustomIconWidget(
-            iconName: 'payment',
-            color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
-            size: 20.w,
-          ),
-          SizedBox(height: 3.h),
-          Text(
-            'Aucun paiement trouvé',
-            style: GoogleFonts.roboto(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w500,
-              color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          SizedBox(height: 1.h),
-          Text(
-            'Essayez de modifier vos filtres de recherche',
-            style: GoogleFonts.roboto(
-              fontSize: 12.sp,
-              fontWeight: FontWeight.w400,
-              color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _refreshPayments() async {
-    await _loadPayments();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Paiements mis à jour',
-            style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-          ),
-          backgroundColor: AppTheme.primaryGreen,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
-  void _showNewPaymentDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => NewPaymentDialog(
-        onPaymentCreated: (payment) {
-          _loadPayments(); // Recharger depuis Supabase
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Nouveau paiement créé',
-                style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-              ),
-              backgroundColor: AppTheme.primaryGreen,
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _recordPayment(Map<String, dynamic> payment) async {
-    try {
-      await _paymentsService.recordPayment(payment['id']);
-      await _loadPayments(); // Recharger les données
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Paiement enregistré pour ${payment['merchantName']}',
-            style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-          ),
-          backgroundColor: AppTheme.primaryGreen,
-        ),
-      );
-    } catch (error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Erreur: $error',
-            style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-          ),
-          backgroundColor: AppTheme.alertRed,
-        ),
-      );
-    }
-  }
-
-  void _showPaymentDetails(Map<String, dynamic> payment) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: 70.h,
-        decoration: BoxDecoration(
-          color: AppTheme.lightTheme.colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 10.w,
-              height: 0.5.h,
-              margin: EdgeInsets.symmetric(vertical: 2.h),
-              decoration: BoxDecoration(
-                color: AppTheme.lightTheme.colorScheme.outline,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.all(4.w),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Détails du paiement',
-                      style: GoogleFonts.roboto(
-                        fontSize: 18.sp,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.lightTheme.colorScheme.onSurface,
-                      ),
-                    ),
-                    SizedBox(height: 3.h),
-                    _buildDetailRow('Commerçant', payment['merchantName']),
-                    _buildDetailRow('Local', payment['propertyNumber']),
-                    _buildDetailRow('Montant', payment['amount']),
-                    _buildDetailRow('Échéance', payment['dueDate']),
-                    _buildDetailRow(
-                        'Statut', _getStatusLabel(payment['status'])),
-                    if (payment['paidDate'] != null)
-                      _buildDetailRow('Date de paiement', payment['paidDate']),
-                    if (payment['daysOverdue'] != null)
-                      _buildDetailRow(
-                          'Jours de retard', '${payment['daysOverdue']} jours'),
-                    _buildDetailRow('Description', payment['description']),
-                    if (payment['contractNumber'] != null)
-                      _buildDetailRow('N° Contrat', payment['contractNumber']),
-                    if (payment['paymentMethod'] != null)
-                      _buildDetailRow(
-                          'Mode de paiement', payment['paymentMethod']),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 1.h),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 30.w,
-            child: Text(
-              label,
-              style: GoogleFonts.roboto(
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: GoogleFonts.roboto(
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w400,
-                color: AppTheme.lightTheme.colorScheme.onSurface,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getStatusLabel(String status) {
-    switch (status) {
-      case 'paid':
-        return 'Payé';
-      case 'pending':
-        return 'En attente';
-      case 'overdue':
-        return 'En retard';
-      case 'partial':
-        return 'Partiel';
-      default:
-        return 'Inconnu';
-    }
-  }
-
-  void _showFilterDialog() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: 40.h,
-        decoration: BoxDecoration(
-          color: AppTheme.lightTheme.colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 10.w,
-              height: 0.5.h,
-              margin: EdgeInsets.symmetric(vertical: 2.h),
-              decoration: BoxDecoration(
-                color: AppTheme.lightTheme.colorScheme.outline,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.all(4.w),
-              child: Text(
-                'Filtres avancés',
-                style: GoogleFonts.roboto(
-                  fontSize: 16.sp,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.lightTheme.colorScheme.onSurface,
-                ),
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.symmetric(horizontal: 4.w),
-                children: [
-                  ListTile(
-                    leading: CustomIconWidget(
-                      iconName: 'date_range',
-                      color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
-                      size: 6.w,
-                    ),
-                    title: Text('Filtrer par période'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showDateRangeFilter();
-                    },
-                  ),
-                  ListTile(
-                    leading: CustomIconWidget(
-                      iconName: 'attach_money',
-                      color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
-                      size: 6.w,
-                    ),
-                    title: Text('Filtrer par montant'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showAmountRangeFilter();
-                    },
-                  ),
-                  ListTile(
-                    leading: CustomIconWidget(
-                      iconName: 'business',
-                      color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
-                      size: 6.w,
-                    ),
-                    title: Text('Filtrer par local'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showPropertyFilter();
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _sendReminder(Map<String, dynamic> payment) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Rappel envoyé à ${payment['merchantName']}',
-          style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-        ),
-        backgroundColor: AppTheme.warningAccent,
-      ),
-    );
-  }
-
-  void _viewPaymentHistory(Map<String, dynamic> payment) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Historique des paiements pour ${payment['merchantName']}',
-          style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-        ),
-        backgroundColor: AppTheme.primaryBlue,
-      ),
-    );
-  }
-
-  void _generateReceipt(Map<String, dynamic> payment) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Reçu généré pour ${payment['merchantName']}',
-          style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-        ),
-        backgroundColor: AppTheme.infoAccent,
-      ),
-    );
-  }
-
-  void _editPaymentAmount(Map<String, dynamic> payment) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Modification du montant pour ${payment['merchantName']}',
-          style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-        ),
-        backgroundColor: AppTheme.neutralMedium,
-      ),
-    );
-  }
-
-  void _markAsDisputed(Map<String, dynamic> payment) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Paiement marqué en litige pour ${payment['merchantName']}',
-          style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-        ),
-        backgroundColor: AppTheme.alertRed,
-      ),
-    );
-  }
-
-  void _exportPayments() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Export des ${_filteredPayments.length} paiements en cours...',
-          style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-        ),
-        backgroundColor: AppTheme.primaryBlue,
-      ),
-    );
-  }
-
-  void _showDateRangeFilter() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Filtre par période - Fonctionnalité à venir',
-          style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-        ),
-        backgroundColor: AppTheme.infoAccent,
-      ),
-    );
-  }
-
-  void _showAmountRangeFilter() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Filtre par montant - Fonctionnalité à venir',
-          style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-        ),
-        backgroundColor: AppTheme.infoAccent,
-      ),
-    );
-  }
-
-  void _showPropertyFilter() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Filtre par local - Fonctionnalité à venir',
-          style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-        ),
-        backgroundColor: AppTheme.infoAccent,
-      ),
-    );
-  }
-
-  void _handleMenuSelection(String value) {
-    switch (value) {
-      case 'settings':
-        Navigator.pushNamed(context, '/settings-screen');
-        break;
-      case 'help':
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Aide - Fonctionnalité à venir',
-              style: GoogleFonts.roboto(color: AppTheme.surfaceWhite),
-            ),
-            backgroundColor: AppTheme.infoAccent,
-          ),
-        );
-        break;
-    }
   }
 }

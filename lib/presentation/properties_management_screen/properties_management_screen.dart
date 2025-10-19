@@ -136,11 +136,9 @@ class _PropertiesManagementScreenState
     HapticFeedback.lightImpact();
   }
 
-  void _onPropertyAdded(Map<String, dynamic> newProperty) {
-    setState(() {
-      _properties.add(newProperty);
-    });
-    _filterProperties();
+  Future<void> _onPropertyAdded(Map<String, dynamic> newProperty) async {
+    // Recharge la liste depuis Supabase au lieu d'ajouter localement
+    await _loadProperties();
     HapticFeedback.mediumImpact();
   }
 

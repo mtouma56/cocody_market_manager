@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sizer/sizer.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_export.dart';
 import '../../services/merchants_service.dart';
@@ -21,22 +20,14 @@ class MerchantsManagementScreen extends StatefulWidget {
 }
 
 class _MerchantsManagementScreenState extends State<MerchantsManagementScreen> {
+  String _selectedStatus = 'all';
+  String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
-  List<Map<String, dynamic>> _allMerchants = [];
+  bool _isSearchActive = false;
+  List<Map<String, dynamic>> _merchants = [];
   List<Map<String, dynamic>> _filteredMerchants = [];
-  Map<String, dynamic> _currentFilters = {
-    'status': 'Tous',
-    'propertyType': 'Tous',
-    'floor': 'Tous',
-    'hasEmail': false,
-    'hasPhone': false,
-  };
-
   bool _isLoading = true;
   String? _error;
-  DateTime? _lastSyncTime;
 
   final MerchantsService _merchantsService = MerchantsService();
 
@@ -52,7 +43,6 @@ class _MerchantsManagementScreenState extends State<MerchantsManagementScreen> {
     super.dispose();
   }
 
-  /// Charge les commerçants depuis Supabase
   Future<void> _loadMerchants() async {
     try {
       setState(() {
@@ -63,9 +53,8 @@ class _MerchantsManagementScreenState extends State<MerchantsManagementScreen> {
       final merchants = await _merchantsService.getAllMerchants();
 
       setState(() {
-        _allMerchants = merchants;
+        _merchants = merchants;
         _isLoading = false;
-        _lastSyncTime = DateTime.now();
       });
 
       _filterMerchants();
@@ -79,82 +68,56 @@ class _MerchantsManagementScreenState extends State<MerchantsManagementScreen> {
 
   void _filterMerchants() {
     setState(() {
-      _filteredMerchants = _allMerchants.where((merchant) {
-        // Text search filter
-        final searchQuery = _searchController.text.toLowerCase();
-        final matchesSearch = searchQuery.isEmpty ||
-            (merchant['name'] as String).toLowerCase().contains(searchQuery) ||
-            (merchant['businessType'] as String)
-                .toLowerCase()
-                .contains(searchQuery) ||
-            (merchant['phone'] as String).toLowerCase().contains(searchQuery) ||
-            (merchant['email'] as String? ?? '')
-                .toLowerCase()
-                .contains(searchQuery);
+      _filteredMerchants =
+          _merchants.where((merchant) {
+            // Status filter
+            bool statusMatch =
+                _selectedStatus == 'all' ||
+                merchant['status'] == _selectedStatus;
 
-        if (!matchesSearch) return false;
+            // Search filter
+            bool searchMatch =
+                _searchQuery.isEmpty ||
+                (merchant['name'] as String).toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                ) ||
+                (merchant['businessType'] as String).toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                ) ||
+                (merchant['phone'] as String).toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                );
 
-        // Status filter
-        if (_currentFilters['status'] != 'Tous') {
-          String filterStatus = _currentFilters['status'] as String;
-          String merchantStatus = merchant['status'] as String;
-
-          if (filterStatus == 'Actif' && merchantStatus != 'active')
-            return false;
-          if (filterStatus == 'Expire bientôt' && merchantStatus != 'expiring')
-            return false;
-          if (filterStatus == 'En retard' && merchantStatus != 'overdue')
-            return false;
-        }
-
-        // Property type filter
-        if (_currentFilters['propertyType'] != 'Tous') {
-          String filterType = _currentFilters['propertyType'] as String;
-          String merchantType = merchant['type'] ?? 'shop';
-
-          Map<String, String> typeMapping = {
-            'Boutique 9m²': 'shop',
-            'Boutique 4.5m²': 'shop',
-            'Banque': 'bank',
-            'Restaurant': 'restaurant',
-            'Box': 'box',
-            'Étal de marché': 'market_stall',
-          };
-
-          if (typeMapping[filterType] != merchantType) return false;
-        }
-
-        // Floor filter
-        if (_currentFilters['floor'] != 'Tous') {
-          if (_currentFilters['floor'] != merchant['floor']) return false;
-        }
-
-        // Email filter
-        if (_currentFilters['hasEmail'] as bool) {
-          if ((merchant['email'] as String? ?? '').isEmpty) return false;
-        }
-
-        // Phone filter
-        if (_currentFilters['hasPhone'] as bool) {
-          if ((merchant['phone'] as String? ?? '').isEmpty) return false;
-        }
-
-        return true;
-      }).toList();
+            return statusMatch && searchMatch;
+          }).toList();
     });
   }
 
-  Future<void> _refreshMerchants() async {
+  void _onStatusFilterChanged(String status) {
+    setState(() {
+      _selectedStatus = status;
+    });
+    _filterMerchants();
     HapticFeedback.lightImpact();
-    await _loadMerchants();
+  }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Données synchronisées avec succès'),
-        backgroundColor: AppTheme.primaryGreen,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  void _onSearchChanged(String query) {
+    setState(() {
+      _searchQuery = query;
+    });
+    _filterMerchants();
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _isSearchActive = !_isSearchActive;
+      if (!_isSearchActive) {
+        _searchController.clear();
+        _searchQuery = '';
+        _filterMerchants();
+      }
+    });
+    HapticFeedback.lightImpact();
   }
 
   void _showFilterBottomSheet() {
@@ -162,15 +125,30 @@ class _MerchantsManagementScreenState extends State<MerchantsManagementScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => MerchantFilterBottomSheetWidget(
-        currentFilters: _currentFilters,
-        onFiltersApplied: (filters) {
-          setState(() {
-            _currentFilters = filters;
-          });
-          _filterMerchants();
-        },
-      ),
+      builder:
+          (context) => MerchantFilterBottomSheetWidget(
+            onFiltersApplied: (filters) {
+              // Handle the filters map returned from the bottom sheet
+              if (filters['status'] != null && filters['status'] != 'Tous') {
+                String status = filters['status'];
+                switch (status) {
+                  case 'Actif':
+                    _onStatusFilterChanged('active');
+                    break;
+                  case 'Expire bientôt':
+                    _onStatusFilterChanged('expiring');
+                    break;
+                  case 'En retard':
+                    _onStatusFilterChanged('overdue');
+                    break;
+                  default:
+                    _onStatusFilterChanged('all');
+                }
+              } else {
+                _onStatusFilterChanged('all');
+              }
+            },
+          ),
     );
   }
 
@@ -179,215 +157,105 @@ class _MerchantsManagementScreenState extends State<MerchantsManagementScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => AddMerchantBottomSheetWidget(
-        onMerchantAdded: (merchantData) {
-          _loadMerchants(); // Recharger depuis Supabase
-        },
-      ),
+      builder:
+          (context) => AddMerchantBottomSheetWidget(
+            onMerchantAdded: (merchant) {
+              _loadMerchants(); // Refresh the list
+            },
+          ),
     );
   }
 
-  void _showMerchantContextMenu(
-      BuildContext context, Map<String, dynamic> merchant) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 12.w,
-              height: 0.5.h,
-              margin: EdgeInsets.symmetric(vertical: 2.h),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.outline,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            ListTile(
-              leading: CustomIconWidget(
-                iconName: 'content_copy',
-                size: 24,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              title: const Text('Dupliquer le contact'),
-              onTap: () {
-                Navigator.pop(context);
-                _duplicateMerchant(merchant);
-              },
-            ),
-            ListTile(
-              leading: CustomIconWidget(
-                iconName: 'file_download',
-                size: 24,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              title: const Text('Exporter les détails'),
-              onTap: () {
-                Navigator.pop(context);
-                _exportMerchantDetails(merchant);
-              },
-            ),
-            ListTile(
-              leading: CustomIconWidget(
-                iconName: 'notifications',
-                size: 24,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              title: const Text('Définir des rappels'),
-              onTap: () {
-                Navigator.pop(context);
-                _setReminders(merchant);
-              },
-            ),
-            SizedBox(height: 2.h),
-          ],
-        ),
-      ),
-    );
+  void _onMerchantTap(Map<String, dynamic> merchant) {
+    HapticFeedback.lightImpact();
+    _showMerchantDetails(merchant);
   }
 
-  void _duplicateMerchant(Map<String, dynamic> merchant) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-            'Duplication de "${merchant['name']}" - Fonctionnalité à venir'),
-        backgroundColor: AppTheme.primaryGreen,
-      ),
-    );
-  }
-
-  void _exportMerchantDetails(Map<String, dynamic> merchant) {
-    final details = '''
-Nom: ${merchant['name']}
-Type d'activité: ${merchant['businessType']}
-Téléphone: ${merchant['phone']}
-Email: ${merchant['email'].isEmpty ? 'Non renseigné' : merchant['email']}
-Adresse: ${merchant['address'] ?? 'Non renseignée'}
-Propriété: ${merchant['number'] ?? 'Non assignée'} (${merchant['floor'] ?? 'Étage non défini'})
-Statut: ${merchant['status']}
-Notes: ${merchant['notes'] ?? 'Aucune note'}
-''';
-
-    Clipboard.setData(ClipboardData(text: details));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Détails copiés dans le presse-papiers'),
-        backgroundColor: AppTheme.primaryGreen,
-      ),
-    );
-  }
-
-  void _setReminders(Map<String, dynamic> merchant) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Rappels configurés pour ${merchant['name']}'),
-        backgroundColor: AppTheme.primaryGreen,
-      ),
-    );
-  }
-
-  Future<void> _makePhoneCall(String phoneNumber) async {
-    final Uri phoneUri = Uri(scheme: 'tel', path: phoneNumber);
-    if (await canLaunchUrl(phoneUri)) {
-      await launchUrl(phoneUri);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Impossible d\'ouvrir l\'application téléphone'),
-          backgroundColor: AppTheme.alertRed,
-        ),
-      );
-    }
-  }
-
-  Future<void> _sendMessage(String phoneNumber) async {
-    final Uri smsUri = Uri(scheme: 'sms', path: phoneNumber);
-    if (await canLaunchUrl(smsUri)) {
-      await launchUrl(smsUri);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Impossible d\'ouvrir l\'application messages'),
-          backgroundColor: AppTheme.alertRed,
-        ),
-      );
-    }
-  }
-
-  void _viewMerchantProfile(Map<String, dynamic> merchant) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Profil de ${merchant['name']} - Fonctionnalité à venir'),
-        backgroundColor: AppTheme.infoAccent,
-      ),
-    );
-  }
-
-  void _viewLease(Map<String, dynamic> merchant) {
-    Navigator.pushNamed(context, '/lease-management-screen');
-  }
-
-  void _viewPaymentHistory(Map<String, dynamic> merchant) {
-    Navigator.pushNamed(context, '/payments-management-screen');
-  }
-
-  void _editMerchant(Map<String, dynamic> merchant) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-            'Modification de ${merchant['name']} - Fonctionnalité à venir'),
-        backgroundColor: AppTheme.infoAccent,
-      ),
-    );
-  }
-
-  void _removeMerchant(Map<String, dynamic> merchant) {
+  void _showMerchantDetails(Map<String, dynamic> merchant) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Supprimer le commerçant'),
-        content:
-            Text('Êtes-vous sûr de vouloir supprimer ${merchant['name']} ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await _merchantsService.removeMerchant(merchant['id']);
-                Navigator.pop(context);
-                await _loadMerchants();
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('${merchant['name']} supprimé'),
-                    backgroundColor: AppTheme.alertRed,
+      builder:
+          (context) => AlertDialog(
+            title: Text(merchant['name']),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Activité: ${merchant['businessType']}'),
+                Text('Téléphone: ${merchant['phone']}'),
+                if (merchant['email']?.isNotEmpty == true)
+                  Text('Email: ${merchant['email']}'),
+                Text('Statut: ${_getStatusLabel(merchant['status'])}'),
+                if (merchant['number'] != null) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Local:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                );
-              } catch (error) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Erreur: $error'),
-                    backgroundColor: AppTheme.alertRed,
+                  Text('Numéro: ${merchant['number']}'),
+                  Text('Type: ${merchant['type']}'),
+                  Text('Étage: ${merchant['floor']}'),
+                ],
+                if (merchant['notes']?.isNotEmpty == true) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Notes:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.alertRed,
+                  Text(merchant['notes']),
+                ],
+              ],
             ),
-            child: const Text('Supprimer'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Fermer'),
+              ),
+              if (merchant['phone']?.isNotEmpty == true)
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _callMerchant(merchant['phone']);
+                  },
+                  child: const Text('Appeler'),
+                ),
+            ],
           ),
-        ],
+    );
+  }
+
+  void _callMerchant(String phoneNumber) {
+    HapticFeedback.lightImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Appel de $phoneNumber'),
+        action: SnackBarAction(label: 'OK', onPressed: () {}),
+      ),
+    );
+  }
+
+  String _getStatusLabel(String status) {
+    switch (status) {
+      case 'active':
+        return 'Actif';
+      case 'inactive':
+        return 'Inactif';
+      case 'expiring':
+        return 'Expire bientôt';
+      case 'overdue':
+        return 'En retard';
+      default:
+        return 'Inconnu';
+    }
+  }
+
+  Future<void> _onRefresh() async {
+    HapticFeedback.mediumImpact();
+    await _loadMerchants();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Données mises à jour'),
+        duration: Duration(seconds: 1),
       ),
     );
   }
@@ -419,15 +287,15 @@ Notes: ${merchant['notes'] ?? 'Aucune note'}
           Text(
             'Erreur de chargement',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppTheme.lightTheme.colorScheme.error,
-                ),
+              color: AppTheme.lightTheme.colorScheme.error,
+            ),
           ),
           SizedBox(height: 1.h),
           Text(
             _error ?? 'Une erreur est survenue',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
-                ),
+              color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
+            ),
             textAlign: TextAlign.center,
           ),
           SizedBox(height: 2.h),
@@ -442,294 +310,294 @@ Notes: ${merchant['notes'] ?? 'Aucune note'}
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return Scaffold(
-      key: _scaffoldKey,
-      appBar: CustomAppBar(
-        title: 'Commerçants',
-        variant: CustomAppBarVariant.withActions,
-        actions: [
-          IconButton(
-            onPressed: _showAddMerchantBottomSheet,
-            icon: CustomIconWidget(
-              iconName: 'add',
-              size: 24,
-              color: colorScheme.onSurface,
-            ),
-            tooltip: 'Ajouter un commerçant',
-          ),
-          IconButton(
-            onPressed: () {
-              _searchController.clear();
-              _filterMerchants();
-            },
-            icon: CustomIconWidget(
-              iconName: 'search',
-              size: 24,
-              color: colorScheme.onSurface,
-            ),
-            tooltip: 'Rechercher',
-          ),
-        ],
-      ),
+      backgroundColor: AppTheme.lightTheme.scaffoldBackgroundColor,
+      appBar:
+          _isSearchActive
+              ? AppBar(
+                backgroundColor: AppTheme.lightTheme.colorScheme.surface,
+                elevation: 1,
+                leading: IconButton(
+                  onPressed: _toggleSearch,
+                  icon: CustomIconWidget(
+                    iconName: 'arrow_back',
+                    color: AppTheme.lightTheme.colorScheme.onSurface,
+                    size: 24,
+                  ),
+                ),
+                title: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Rechercher commerçants...',
+                    border: InputBorder.none,
+                  ),
+                  onChanged: _onSearchChanged,
+                ),
+                actions: [
+                  if (_searchController.text.isNotEmpty)
+                    IconButton(
+                      onPressed: () {
+                        _searchController.clear();
+                        _onSearchChanged('');
+                      },
+                      icon: CustomIconWidget(
+                        iconName: 'clear',
+                        color: AppTheme.lightTheme.colorScheme.onSurface,
+                        size: 24,
+                      ),
+                    ),
+                ],
+              )
+              : CustomAppBar(
+                title: 'Commerçants',
+                variant: CustomAppBarVariant.withActions,
+                onSearchPressed: _toggleSearch,
+              ),
       drawer: Drawer(
+        backgroundColor: AppTheme.lightTheme.colorScheme.surface,
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
             DrawerHeader(
               decoration: BoxDecoration(
-                color: colorScheme.primary,
+                color: AppTheme.lightTheme.colorScheme.primary,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Cocody Market Manager',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: colorScheme.onPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  CustomIconWidget(
+                    iconName: 'business',
+                    color: AppTheme.lightTheme.colorScheme.onPrimary,
+                    size: 40,
                   ),
                   SizedBox(height: 1.h),
                   Text(
-                    'Gestion des commerçants',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onPrimary.withValues(alpha: 0.8),
+                    'Cocody Market Manager',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: AppTheme.lightTheme.colorScheme.onPrimary,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const Spacer(),
-                  if (_lastSyncTime != null)
-                    Text(
-                      'Dernière sync: ${_lastSyncTime!.day}/${_lastSyncTime!.month} ${_lastSyncTime!.hour}:${_lastSyncTime!.minute.toString().padLeft(2, '0')}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onPrimary.withValues(alpha: 0.7),
-                      ),
+                  Text(
+                    'Gestion des commerçants',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.lightTheme.colorScheme.onPrimary
+                          .withValues(alpha: 0.8),
                     ),
+                  ),
                 ],
               ),
             ),
             ListTile(
               leading: CustomIconWidget(
                 iconName: 'dashboard',
+                color: AppTheme.lightTheme.colorScheme.onSurface,
                 size: 24,
-                color: colorScheme.onSurface,
               ),
               title: const Text('Tableau de bord'),
-              onTap: () => Navigator.pushNamed(context, '/dashboard-screen'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/dashboard-screen');
+              },
             ),
             ListTile(
               leading: CustomIconWidget(
                 iconName: 'business',
+                color: AppTheme.lightTheme.colorScheme.onSurface,
                 size: 24,
-                color: colorScheme.onSurface,
               ),
-              title: const Text('Propriétés'),
-              onTap: () =>
-                  Navigator.pushNamed(context, '/properties-management-screen'),
+              title: const Text('Locaux'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/properties-management-screen');
+              },
             ),
             ListTile(
               leading: CustomIconWidget(
                 iconName: 'store',
+                color: AppTheme.lightTheme.colorScheme.secondary,
                 size: 24,
-                color: colorScheme.primary,
               ),
               title: const Text('Commerçants'),
               selected: true,
+              selectedTileColor: AppTheme.lightTheme.colorScheme.secondary
+                  .withValues(alpha: 0.1),
               onTap: () => Navigator.pop(context),
             ),
             ListTile(
               leading: CustomIconWidget(
                 iconName: 'description',
+                color: AppTheme.lightTheme.colorScheme.onSurface,
                 size: 24,
-                color: colorScheme.onSurface,
               ),
               title: const Text('Baux'),
-              onTap: () =>
-                  Navigator.pushNamed(context, '/lease-management-screen'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/lease-management-screen');
+              },
             ),
             ListTile(
               leading: CustomIconWidget(
                 iconName: 'payment',
+                color: AppTheme.lightTheme.colorScheme.onSurface,
                 size: 24,
-                color: colorScheme.onSurface,
               ),
               title: const Text('Paiements'),
-              onTap: () =>
-                  Navigator.pushNamed(context, '/payments-management-screen'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/payments-management-screen');
+              },
             ),
             const Divider(),
             ListTile(
               leading: CustomIconWidget(
                 iconName: 'settings',
+                color: AppTheme.lightTheme.colorScheme.onSurface,
                 size: 24,
-                color: colorScheme.onSurface,
               ),
               title: const Text('Paramètres'),
-              onTap: () => Navigator.pushNamed(context, '/settings-screen'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/settings-screen');
+              },
             ),
           ],
         ),
       ),
-      body: _isLoading
-          ? _buildLoadingState()
-          : _error != null
+      body:
+          _isLoading
+              ? _buildLoadingState()
+              : _error != null
               ? _buildErrorState()
-              : Column(
+              : RefreshIndicator(
+                onRefresh: _onRefresh,
+                color: AppTheme.lightTheme.colorScheme.primary,
+                child: Column(
                   children: [
-                    // Search Bar
-                    MerchantSearchBarWidget(
-                      controller: _searchController,
-                      hintText: 'Rechercher par nom, activité, téléphone...',
-                      onChanged: (value) => _filterMerchants(),
-                      onFilterPressed: _showFilterBottomSheet,
-                    ),
-
-                    // Active Filters Indicator
-                    if (_currentFilters.values.any((value) =>
-                        (value is String && value != 'Tous') ||
-                        (value is bool && value == true)))
-                      Container(
-                        margin: EdgeInsets.symmetric(horizontal: 4.w),
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 3.w, vertical: 1.h),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            CustomIconWidget(
-                              iconName: 'filter_list',
-                              size: 16,
-                              color: colorScheme.onPrimaryContainer,
-                            ),
-                            SizedBox(width: 2.w),
-                            Text(
-                              'Filtres actifs',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onPrimaryContainer,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const Spacer(),
-                            GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _currentFilters = {
-                                    'status': 'Tous',
-                                    'propertyType': 'Tous',
-                                    'floor': 'Tous',
-                                    'hasEmail': false,
-                                    'hasPhone': false,
-                                  };
-                                });
-                                _filterMerchants();
-                              },
-                              child: CustomIconWidget(
-                                iconName: 'clear',
-                                size: 16,
-                                color: colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ],
-                        ),
+                    // Search bar
+                    if (!_isSearchActive)
+                      MerchantSearchBarWidget(
+                        controller: _searchController,
+                        onChanged: _onSearchChanged,
+                        onFilterPressed: _showFilterBottomSheet,
                       ),
 
-                    // Results Count
+                    // Merchants count
                     Container(
-                      margin:
-                          EdgeInsets.symmetric(horizontal: 4.w, vertical: 1.h),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 4.w,
+                        vertical: 1.h,
+                      ),
                       child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
                             '${_filteredMerchants.length} commerçant${_filteredMerchants.length > 1 ? 's' : ''} trouvé${_filteredMerchants.length > 1 ? 's' : ''}',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.copyWith(
+                              color:
+                                  AppTheme
+                                      .lightTheme
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
+                          if (_selectedStatus != 'all' ||
+                              _searchQuery.isNotEmpty)
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _selectedStatus = 'all';
+                                  _searchQuery = '';
+                                  _searchController.clear();
+                                });
+                                _filterMerchants();
+                              },
+                              child: const Text('Effacer filtres'),
+                            ),
                         ],
                       ),
                     ),
 
-                    // Merchants List
+                    // Merchants list
                     Expanded(
-                      child: _filteredMerchants.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  CustomIconWidget(
-                                    iconName: 'store_mall_directory',
-                                    size: 64,
-                                    color: colorScheme.onSurfaceVariant
-                                        .withValues(alpha: 0.5),
-                                  ),
-                                  SizedBox(height: 2.h),
-                                  Text(
-                                    'Aucun commerçant trouvé',
-                                    style:
-                                        theme.textTheme.titleMedium?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
+                      child:
+                          _filteredMerchants.isEmpty
+                              ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    CustomIconWidget(
+                                      iconName: 'search_off',
+                                      color:
+                                          AppTheme
+                                              .lightTheme
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                      size: 64,
                                     ),
-                                  ),
-                                  SizedBox(height: 1.h),
-                                  Text(
-                                    'Essayez de modifier vos critères de recherche',
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: colorScheme.onSurfaceVariant
-                                          .withValues(alpha: 0.7),
+                                    SizedBox(height: 2.h),
+                                    Text(
+                                      'Aucun commerçant trouvé',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleMedium?.copyWith(
+                                        color:
+                                            AppTheme
+                                                .lightTheme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                      ),
                                     ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            )
-                          : RefreshIndicator(
-                              onRefresh: _refreshMerchants,
-                              color: colorScheme.primary,
-                              child: ListView.builder(
-                                padding: EdgeInsets.only(bottom: 10.h),
+                                    SizedBox(height: 1.h),
+                                    Text(
+                                      'Essayez de modifier vos filtres',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodyMedium?.copyWith(
+                                        color:
+                                            AppTheme
+                                                .lightTheme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                              : ListView.builder(
+                                padding: EdgeInsets.all(2.w),
                                 itemCount: _filteredMerchants.length,
                                 itemBuilder: (context, index) {
                                   final merchant = _filteredMerchants[index];
-                                  return GestureDetector(
-                                    onLongPress: () => _showMerchantContextMenu(
-                                        context, merchant),
+                                  return Padding(
+                                    padding: EdgeInsets.only(bottom: 2.w),
                                     child: MerchantCardWidget(
                                       merchant: merchant,
-                                      onTap: () =>
-                                          _viewMerchantProfile(merchant),
-                                      onCall: () => _makePhoneCall(
-                                          merchant['phone'] as String),
-                                      onMessage: () => _sendMessage(
-                                          merchant['phone'] as String),
-                                      onViewLease: () => _viewLease(merchant),
-                                      onPaymentHistory: () =>
-                                          _viewPaymentHistory(merchant),
-                                      onEdit: () => _editMerchant(merchant),
-                                      onRemove: () => _removeMerchant(merchant),
+                                      onTap: () => _onMerchantTap(merchant),
                                     ),
                                   );
                                 },
                               ),
-                            ),
                     ),
                   ],
                 ),
+              ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddMerchantBottomSheet,
+        backgroundColor: AppTheme.lightTheme.colorScheme.primary,
+        child: CustomIconWidget(
+          iconName: 'add',
+          color: AppTheme.lightTheme.colorScheme.onPrimary,
+          size: 24,
+        ),
+      ),
       bottomNavigationBar: const CustomBottomBar(
         currentIndex: 2,
         variant: CustomBottomBarVariant.standard,
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddMerchantBottomSheet,
-        tooltip: 'Nouveau Commerçant',
-        child: CustomIconWidget(
-          iconName: 'add',
-          size: 24,
-          color: Theme.of(context).colorScheme.onPrimary,
-        ),
       ),
     );
   }

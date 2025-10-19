@@ -7,6 +7,129 @@ class PropertiesService {
 
   final _supabase = Supabase.instance.client;
 
+  /// Crée un nouveau local dans Supabase
+  Future<Map<String, dynamic>> createLocal({
+    required String numero,
+    required String typeId,
+    required String etageId,
+    String statut = 'Disponible',
+    bool actif = true,
+  }) async {
+    try {
+      print(
+          '🚀 Création local: numero=$numero, type=$typeId, etage=$etageId, statut=$statut');
+
+      // INSERT dans Supabase
+      final response = await _supabase.from('locaux').insert({
+        'numero': numero,
+        'type_id': typeId,
+        'etage_id': etageId,
+        'statut': statut,
+        'actif': actif,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }).select('''
+            *,
+            types_locaux(*),
+            etages(*)
+          ''').single();
+
+      print('✅ Local créé avec succès: ${response['numero']}');
+
+      return response;
+    } catch (e, stackTrace) {
+      print('❌ ERREUR createLocal: $e');
+      print('Stack trace: $stackTrace');
+      rethrow; // Important : relance l'erreur pour que l'UI la capture
+    }
+  }
+
+  /// Met à jour un local existant
+  Future<Map<String, dynamic>> updateLocal({
+    required String id,
+    String? numero,
+    String? typeId,
+    String? etageId,
+    String? statut,
+    bool? actif,
+  }) async {
+    try {
+      print('🔄 Mise à jour local: id=$id');
+
+      final data = <String, dynamic>{
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      if (numero != null) data['numero'] = numero;
+      if (typeId != null) data['type_id'] = typeId;
+      if (etageId != null) data['etage_id'] = etageId;
+      if (statut != null) data['statut'] = statut;
+      if (actif != null) data['actif'] = actif;
+
+      final response =
+          await _supabase.from('locaux').update(data).eq('id', id).select('''
+            *,
+            types_locaux(*),
+            etages(*)
+          ''').single();
+
+      print('✅ Local mis à jour avec succès');
+
+      return response;
+    } catch (e, stackTrace) {
+      print('❌ ERREUR updateLocal: $e');
+      print('Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Supprime un local
+  Future<void> deleteLocal(String id) async {
+    try {
+      print('🗑️ Suppression local: id=$id');
+
+      await _supabase.from('locaux').delete().eq('id', id);
+
+      print('✅ Local supprimé avec succès');
+    } catch (e, stackTrace) {
+      print('❌ ERREUR deleteLocal: $e');
+      print('Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Récupère les types de locaux disponibles
+  Future<List<Map<String, dynamic>>> getPropertyTypes() async {
+    try {
+      final response = await _supabase
+          .from('types_locaux')
+          .select('*')
+          .eq('actif', true)
+          .order('nom');
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('❌ ERREUR getPropertyTypes: $e');
+      throw Exception('Erreur lors de la récupération des types: $e');
+    }
+  }
+
+  /// Récupère les étages disponibles
+  Future<List<Map<String, dynamic>>> getFloors() async {
+    try {
+      final response = await _supabase
+          .from('etages')
+          .select('*')
+          .eq('actif', true)
+          .order('ordre');
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('❌ ERREUR getFloors: $e');
+      throw Exception('Erreur lors de la récupération des étages: $e');
+    }
+  }
+
   /// Récupère tous les locaux avec leurs informations complètes
   Future<List<Map<String, dynamic>>> getAllProperties() async {
     try {
@@ -31,7 +154,7 @@ class PropertiesService {
         String floorCode = _getFloorCode(local['etages']['ordre']);
 
         // Déterminer le type en format code
-        String typeCode = _getTypeCode(local['types_locaux']['nom']);
+        String typeCode = _getPropertyTypeCode(local['types_locaux']['nom']);
 
         // Préparer les données du locataire s'il y en a un
         Map<String, dynamic>? tenant;
@@ -87,7 +210,7 @@ class PropertiesService {
       List<Map<String, dynamic>> properties = [];
 
       for (var local in response) {
-        String typeCode = _getTypeCode(local['types_locaux']['nom']);
+        String typeCode = _getPropertyTypeCode(local['types_locaux']['nom']);
 
         Map<String, dynamic>? tenant;
         if (local['baux'] != null && local['baux'].isNotEmpty) {
@@ -137,8 +260,9 @@ class PropertiesService {
   }
 
   /// Convertit l'ordre d'étage en code court
-  String _getFloorCode(int ordre) {
-    switch (ordre) {
+  String _getFloorCode(int? ordre) {
+    final safeOrdre = ordre ?? 0;
+    switch (safeOrdre) {
       case 0:
         return 'rdc';
       case 1:
@@ -168,9 +292,10 @@ class PropertiesService {
     }
   }
 
-  /// Convertit le nom du type en code type
-  String _getTypeCode(String typeName) {
-    switch (typeName) {
+  /// Convertit le nom du type en code
+  String _getPropertyTypeCode(String? typeName) {
+    final safeTypeName = typeName ?? '';
+    switch (safeTypeName) {
       case 'Boutique 9m²':
         return '9m2_shop';
       case 'Boutique 4.5m²':
@@ -188,9 +313,10 @@ class PropertiesService {
     }
   }
 
-  /// Convertit le statut Supabase en code statut
-  String _getStatusCode(String supabaseStatus) {
-    switch (supabaseStatus) {
+  /// Convertit le statut Supabase en code
+  String _getStatusCode(String? supabaseStatus) {
+    final safeStatus = supabaseStatus ?? '';
+    switch (safeStatus) {
       case 'Occupé':
         return 'occupied';
       case 'Disponible':
@@ -202,9 +328,10 @@ class PropertiesService {
     }
   }
 
-  /// Convertit le code statut en statut Supabase
-  String _getSupabaseStatus(String statusCode) {
-    switch (statusCode) {
+  /// Convertit le code de statut en statut Supabase
+  String _getSupabaseStatus(String? statusCode) {
+    final safeStatusCode = statusCode ?? '';
+    switch (safeStatusCode) {
       case 'occupied':
         return 'Occupé';
       case 'available':
@@ -214,5 +341,12 @@ class PropertiesService {
       default:
         return 'Disponible';
     }
+  }
+
+  /// Génère une description automatique pour le local
+  String _generateDescription(String? typeNom, String? etageNom) {
+    final safeType = typeNom ?? 'Local';
+    final safeEtage = etageNom ?? 'Rez-de-chaussée';
+    return '$safeType situé au $safeEtage du Marché Cocody Saint-Jean';
   }
 }

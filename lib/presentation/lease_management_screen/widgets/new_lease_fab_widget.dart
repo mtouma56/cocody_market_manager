@@ -5,10 +5,12 @@ import '../../../core/app_export.dart';
 
 class NewLeaseFabWidget extends StatelessWidget {
   final VoidCallback? onPressed;
+  final VoidCallback? onLeaseCreated;
 
   const NewLeaseFabWidget({
     super.key,
     this.onPressed,
+    this.onLeaseCreated,
   });
 
   @override
@@ -126,6 +128,8 @@ class NewLeaseFabWidget extends StatelessWidget {
                       child: ElevatedButton(
                         onPressed: () {
                           Navigator.pop(context);
+                          // Call the onLeaseCreated callback if provided
+                          onLeaseCreated?.call();
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: const Text(
