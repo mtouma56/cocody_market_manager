@@ -280,4 +280,170 @@ class LeasesService {
         return 'rdc';
     }
   }
+
+  /// Récupère les locaux disponibles pour les baux
+  Future<List<Map<String, dynamic>>> getAvailableProperties() async {
+    try {
+      final response = await _supabase.from('locaux').select('''
+            id,
+            numero,
+            statut,
+            actif,
+            etages!inner(nom, ordre),
+            types_locaux!inner(nom, surface_m2)
+          ''').eq('statut', 'Disponible').eq('actif', true).order('numero');
+
+      print('✅ Récupération de ${response.length} locaux disponibles');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (error) {
+      print('❌ ERREUR getAvailableProperties: $error');
+      throw Exception('Erreur lors de la récupération des locaux: $error');
+    }
+  }
+
+  /// Récupère tous les commerçants actifs
+  Future<List<Map<String, dynamic>>> getActiveMerchants() async {
+    try {
+      final response = await _supabase
+          .from('commercants')
+          .select('id, nom, activite, contact, email, photo_url')
+          .eq('actif', true)
+          .order('nom');
+
+      print('✅ Récupération de ${response.length} commerçants actifs');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (error) {
+      print('❌ ERREUR getActiveMerchants: $error');
+      throw Exception('Erreur lors de la récupération des commerçants: $error');
+    }
+  }
+
+  /// Génère le prochain numéro de contrat
+  Future<String> generateContractNumber() async {
+    try {
+      final year = DateTime.now().year;
+
+      // Compte les baux de cette année
+      final response = await _supabase
+          .from('baux')
+          .select('numero_contrat')
+          .like('numero_contrat', 'BL-$year-%')
+          .order('created_at', ascending: false)
+          .limit(1);
+
+      int nextNumber = 1;
+
+      if (response.isNotEmpty) {
+        final lastContract = response[0]['numero_contrat'] as String;
+        // Extrait le dernier numéro (ex: BL-2025-003 → 3)
+        final parts = lastContract.split('-');
+        if (parts.length == 3) {
+          nextNumber = (int.tryParse(parts[2]) ?? 0) + 1;
+        }
+      }
+
+      // Format: BL-2025-001
+      final contractNumber =
+          'BL-$year-${nextNumber.toString().padLeft(3, '0')}';
+
+      print('🔢 Numéro contrat généré: $contractNumber');
+      return contractNumber;
+    } catch (error) {
+      print('❌ ERREUR generateContractNumber: $error');
+      // En cas d'erreur, génère un numéro avec timestamp
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      return 'BL-${DateTime.now().year}-$timestamp';
+    }
+  }
+
+  /// Crée un nouveau bail
+  Future<Map<String, dynamic>> createLease({
+    required String contractNumber,
+    required String propertyId,
+    required String merchantId,
+    required DateTime startDate,
+    required DateTime endDate,
+    required double monthlyRent,
+    double? montantCaution,
+    double? montantPasDePorte,
+    String status = 'Actif',
+  }) async {
+    try {
+      print('🚀 Création bail: $contractNumber pour local $propertyId');
+
+      // 1. Vérifie que le local est disponible
+      final propertyResponse = await _supabase
+          .from('locaux')
+          .select('statut, numero')
+          .eq('id', propertyId)
+          .single();
+
+      if (propertyResponse['statut'] != 'Disponible') {
+        throw Exception('Ce local n\'est pas disponible');
+      }
+
+      // 2. Prépare les données d'insertion
+      final insertData = {
+        'numero_contrat': contractNumber,
+        'local_id': propertyId,
+        'commercant_id': merchantId,
+        'date_debut': startDate.toIso8601String().split('T')[0],
+        'date_fin': endDate.toIso8601String().split('T')[0],
+        'montant_loyer': monthlyRent,
+        'statut': status,
+        'actif': true,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      // Ajoute les montants de dépôt si spécifiés
+      if (montantCaution != null) {
+        insertData['montant_caution'] = montantCaution;
+      }
+      if (montantPasDePorte != null) {
+        insertData['montant_pas_de_porte'] = montantPasDePorte;
+      }
+
+      // 3. Crée le bail dans une transaction
+      final leaseResponse =
+          await _supabase.from('baux').insert(insertData).select('''
+            *,
+            commercants!inner(
+              nom,
+              activite,
+              contact,
+              email,
+              photo_url
+            ),
+            locaux!inner(
+              numero,
+              etages!inner(nom, ordre),
+              types_locaux!inner(nom, surface_m2)
+            )
+          ''').single();
+
+      // 4. Met à jour le statut du local à "Occupé"
+      await _supabase.from('locaux').update({
+        'statut': 'Occupé',
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', propertyId);
+
+      // 5. Log des informations de création
+      print('✅ Bail créé avec succès: $contractNumber');
+      print('✅ Local ${propertyResponse['numero']} maintenant Occupé');
+
+      if (montantCaution != null) {
+        print('💰 Caution: ${montantCaution.toStringAsFixed(0)} FCFA');
+      }
+      if (montantPasDePorte != null) {
+        print('🏪 Pas de porte: ${montantPasDePorte.toStringAsFixed(0)} FCFA');
+      }
+
+      return leaseResponse;
+    } catch (error, stackTrace) {
+      print('❌ ERREUR createLease: $error');
+      print('Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
 }

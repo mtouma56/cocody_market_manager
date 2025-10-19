@@ -68,25 +68,28 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
 
   void _filterLeases() {
     setState(() {
-      _filteredLeases = _leases.where((lease) {
-        // Status filter
-        bool statusMatch = _selectedStatus == 'all' ||
-            (lease['status']?.toString() ?? '') == _selectedStatus;
+      _filteredLeases =
+          _leases.where((lease) {
+            // Status filter
+            bool statusMatch =
+                _selectedStatus == 'all' ||
+                (lease['status']?.toString() ?? '') == _selectedStatus;
 
-        // Search filter
-        bool searchMatch = _searchQuery.isEmpty ||
-            (lease['tenantName']?.toString() ?? '').toLowerCase().contains(
+            // Search filter
+            bool searchMatch =
+                _searchQuery.isEmpty ||
+                (lease['tenantName']?.toString() ?? '').toLowerCase().contains(
                   _searchQuery.toLowerCase(),
                 ) ||
-            (lease['contractNumber']?.toString() ?? '').toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ) ||
-            (lease['propertyNumber']?.toString() ?? '').toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                );
+                (lease['contractNumber']?.toString() ?? '')
+                    .toLowerCase()
+                    .contains(_searchQuery.toLowerCase()) ||
+                (lease['propertyNumber']?.toString() ?? '')
+                    .toLowerCase()
+                    .contains(_searchQuery.toLowerCase());
 
-        return statusMatch && searchMatch;
-      }).toList();
+            return statusMatch && searchMatch;
+          }).toList();
 
       // Sort by urgency then by end date
       _filteredLeases.sort((a, b) {
@@ -144,47 +147,54 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
   void _showLeaseDetails(Map<String, dynamic> lease) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Bail ${lease['contractNumber'] ?? 'N/A'}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Locataire: ${lease['tenantName'] ?? 'N/A'}'),
-            Text('Activité: ${lease['tenantBusiness'] ?? 'N/A'}'),
-            Text(
-                'Local: ${lease['propertyNumber'] ?? 'N/A'} (${lease['propertyFloor'] ?? 'N/A'})'),
-            Text(
-                'Type: ${_getPropertyTypeLabel(lease['propertyType']?.toString())}'),
-            Text('Superficie: ${lease['propertySize'] ?? 'N/A'}'),
-            Text(
-                'Loyer: ${_formatAmount((lease['monthlyRent'] as num?)?.toDouble() ?? 0)} FCFA/mois'),
-            Text('Début: ${_formatDate(lease['startDate']?.toString() ?? '')}'),
-            Text('Fin: ${_formatDate(lease['endDate']?.toString() ?? '')}'),
-            Text('Statut: ${_getStatusLabel(lease['status']?.toString())}'),
-            Text(
-                'Prochain paiement: ${_formatDate(lease['nextPaymentDate']?.toString() ?? '')}'),
-            if (lease['tenantPhone']?.toString().isNotEmpty == true)
-              Text('Téléphone: ${lease['tenantPhone']}'),
-            if (lease['tenantEmail']?.toString().isNotEmpty == true)
-              Text('Email: ${lease['tenantEmail']}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Fermer'),
-          ),
-          if (lease['tenantPhone']?.toString().isNotEmpty == true)
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _callTenant(lease['tenantPhone']?.toString() ?? '');
-              },
-              child: const Text('Appeler'),
+      builder:
+          (context) => AlertDialog(
+            title: Text('Bail ${lease['contractNumber'] ?? 'N/A'}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Locataire: ${lease['tenantName'] ?? 'N/A'}'),
+                Text('Activité: ${lease['tenantBusiness'] ?? 'N/A'}'),
+                Text(
+                  'Local: ${lease['propertyNumber'] ?? 'N/A'} (${lease['propertyFloor'] ?? 'N/A'})',
+                ),
+                Text(
+                  'Type: ${_getPropertyTypeLabel(lease['propertyType']?.toString())}',
+                ),
+                Text('Superficie: ${lease['propertySize'] ?? 'N/A'}'),
+                Text(
+                  'Loyer: ${_formatAmount((lease['monthlyRent'] as num?)?.toDouble() ?? 0)} FCFA/mois',
+                ),
+                Text(
+                  'Début: ${_formatDate(lease['startDate']?.toString() ?? '')}',
+                ),
+                Text('Fin: ${_formatDate(lease['endDate']?.toString() ?? '')}'),
+                Text('Statut: ${_getStatusLabel(lease['status']?.toString())}'),
+                Text(
+                  'Prochain paiement: ${_formatDate(lease['nextPaymentDate']?.toString() ?? '')}',
+                ),
+                if (lease['tenantPhone']?.toString().isNotEmpty == true)
+                  Text('Téléphone: ${lease['tenantPhone']}'),
+                if (lease['tenantEmail']?.toString().isNotEmpty == true)
+                  Text('Email: ${lease['tenantEmail']}'),
+              ],
             ),
-        ],
-      ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Fermer'),
+              ),
+              if (lease['tenantPhone']?.toString().isNotEmpty == true)
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _callTenant(lease['tenantPhone']?.toString() ?? '');
+                  },
+                  child: const Text('Appeler'),
+                ),
+            ],
+          ),
     );
   }
 
@@ -199,7 +209,9 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
   }
 
   String _formatAmount(double amount) {
-    return amount.toStringAsFixed(0).replaceAllMapped(
+    return amount
+        .toStringAsFixed(0)
+        .replaceAllMapped(
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
           (Match m) => '${m[1]} ',
         );
@@ -278,24 +290,20 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.error_outline,
-            color: Colors.red,
-            size: 64,
-          ),
+          Icon(Icons.error_outline, color: Colors.red, size: 64),
           SizedBox(height: 2.h),
           Text(
             'Erreur de chargement',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Colors.red,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(color: Colors.red),
           ),
           SizedBox(height: 1.h),
           Text(
             _error ?? 'Une erreur est survenue',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
             textAlign: TextAlign.center,
           ),
           SizedBox(height: 2.h),
@@ -321,22 +329,24 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-          children: statuses.map((status) {
-            final isSelected = _selectedStatus == status['code'];
-            return Padding(
-              padding: EdgeInsets.only(right: 2.w),
-              child: FilterChip(
-                label: Text(status['label'] ?? ''),
-                selected: isSelected,
-                onSelected: (_) => _onStatusFilterChanged(status['code'] ?? ''),
-                backgroundColor: Colors.grey[200],
-                selectedColor: Theme.of(context).primaryColor,
-                labelStyle: TextStyle(
-                  color: isSelected ? Colors.white : Colors.black87,
-                ),
-              ),
-            );
-          }).toList(),
+          children:
+              statuses.map((status) {
+                final isSelected = _selectedStatus == status['code'];
+                return Padding(
+                  padding: EdgeInsets.only(right: 2.w),
+                  child: FilterChip(
+                    label: Text(status['label'] ?? ''),
+                    selected: isSelected,
+                    onSelected:
+                        (_) => _onStatusFilterChanged(status['code'] ?? ''),
+                    backgroundColor: Colors.grey[200],
+                    selectedColor: Theme.of(context).primaryColor,
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                );
+              }).toList(),
         ),
       ),
     );
@@ -363,12 +373,14 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
                   Text(
                     'Bail ${lease['contractNumber'] ?? 'N/A'}',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   Container(
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 2.w, vertical: 0.5.h),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 2.w,
+                      vertical: 0.5.h,
+                    ),
                     decoration: BoxDecoration(
                       color: urgencyColor,
                       borderRadius: BorderRadius.circular(12),
@@ -395,8 +407,8 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
                     child: Text(
                       lease['tenantName']?.toString() ?? 'N/A',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -423,23 +435,22 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
                   Text(
                     '${_formatAmount((lease['monthlyRent'] as num?)?.toDouble() ?? 0)} FCFA/mois',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).primaryColor,
-                        ),
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).primaryColor,
+                    ),
                   ),
                   Container(
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 2.w, vertical: 0.5.h),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 2.w,
+                      vertical: 0.5.h,
+                    ),
                     decoration: BoxDecoration(
                       color: statusColor,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       _getStatusLabel(lease['status']?.toString()),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
                     ),
                   ),
                 ],
@@ -449,9 +460,9 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
               // Dates
               Text(
                 'Fin: ${_formatDate(lease['endDate']?.toString() ?? '')} • Prochain paiement: ${_formatDate(lease['nextPaymentDate']?.toString() ?? '')}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[600],
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
               ),
             ],
           ),
@@ -499,69 +510,64 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      appBar: _isSearchActive
-          ? AppBar(
-              backgroundColor: Colors.white,
-              elevation: 1,
-              leading: IconButton(
-                onPressed: _toggleSearch,
-                icon: const Icon(Icons.arrow_back, color: Colors.black87),
-              ),
-              title: TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'Rechercher baux...',
-                  border: InputBorder.none,
+      appBar:
+          _isSearchActive
+              ? AppBar(
+                backgroundColor: Colors.white,
+                elevation: 1,
+                leading: IconButton(
+                  onPressed: _toggleSearch,
+                  icon: const Icon(Icons.arrow_back, color: Colors.black87),
                 ),
-                onChanged: _onSearchChanged,
-              ),
-              actions: [
-                if (_searchController.text.isNotEmpty)
-                  IconButton(
-                    onPressed: () {
-                      _searchController.clear();
-                      _onSearchChanged('');
-                    },
-                    icon: const Icon(Icons.clear, color: Colors.black87),
+                title: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Rechercher baux...',
+                    border: InputBorder.none,
                   ),
-              ],
-            )
-          : CustomAppBar(
-              title: 'Baux',
-              variant: CustomAppBarVariant.withActions,
-              onSearchPressed: _toggleSearch,
-            ),
+                  onChanged: _onSearchChanged,
+                ),
+                actions: [
+                  if (_searchController.text.isNotEmpty)
+                    IconButton(
+                      onPressed: () {
+                        _searchController.clear();
+                        _onSearchChanged('');
+                      },
+                      icon: const Icon(Icons.clear, color: Colors.black87),
+                    ),
+                ],
+              )
+              : CustomAppBar(
+                title: 'Baux',
+                variant: CustomAppBarVariant.withActions,
+                onSearchPressed: _toggleSearch,
+              ),
       drawer: Drawer(
         backgroundColor: Colors.white,
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
             DrawerHeader(
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
-              ),
+              decoration: BoxDecoration(color: Theme.of(context).primaryColor),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.business,
-                    color: Colors.white,
-                    size: 40,
-                  ),
+                  const Icon(Icons.business, color: Colors.white, size: 40),
                   SizedBox(height: 1.h),
                   Text(
                     'Cocody Market Manager',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   Text(
                     'Gestion des baux',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white70,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
                   ),
                 ],
               ),
@@ -591,8 +597,10 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
               },
             ),
             ListTile(
-              leading: Icon(Icons.description,
-                  color: Theme.of(context).primaryColor),
+              leading: Icon(
+                Icons.description,
+                color: Theme.of(context).primaryColor,
+              ),
               title: const Text('Baux'),
               selected: true,
               selectedTileColor: Theme.of(context).primaryColor.withAlpha(26),
@@ -618,56 +626,59 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
           ],
         ),
       ),
-      body: _isLoading
-          ? _buildLoadingState()
-          : _error != null
+      body:
+          _isLoading
+              ? _buildLoadingState()
+              : _error != null
               ? _buildErrorState()
               : RefreshIndicator(
-                  onRefresh: _onRefresh,
-                  color: Theme.of(context).primaryColor,
-                  child: Column(
-                    children: [
-                      // Status filter chips
-                      _buildStatusFilterChips(),
+                onRefresh: _onRefresh,
+                color: Theme.of(context).primaryColor,
+                child: Column(
+                  children: [
+                    // Status filter chips
+                    _buildStatusFilterChips(),
 
-                      // Lease count
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 4.w, vertical: 1.h),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              '${_filteredLeases.length} bail${_filteredLeases.length > 1 ? 'aux' : ''} trouvé${_filteredLeases.length > 1 ? 's' : ''}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
-                                    color: Colors.grey[600],
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                            ),
-                            if (_selectedStatus != 'all' ||
-                                _searchQuery.isNotEmpty)
-                              TextButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedStatus = 'all';
-                                    _searchQuery = '';
-                                    _searchController.clear();
-                                  });
-                                  _filterLeases();
-                                },
-                                child: const Text('Effacer filtres'),
-                              ),
-                          ],
-                        ),
+                    // Lease count
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 4.w,
+                        vertical: 1.h,
                       ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '${_filteredLeases.length} bail${_filteredLeases.length > 1 ? 'aux' : ''} trouvé${_filteredLeases.length > 1 ? 's' : ''}',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          if (_selectedStatus != 'all' ||
+                              _searchQuery.isNotEmpty)
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _selectedStatus = 'all';
+                                  _searchQuery = '';
+                                  _searchController.clear();
+                                });
+                                _filterLeases();
+                              },
+                              child: const Text('Effacer filtres'),
+                            ),
+                        ],
+                      ),
+                    ),
 
-                      // Leases list
-                      Expanded(
-                        child: _filteredLeases.isEmpty
-                            ? Center(
+                    // Leases list
+                    Expanded(
+                      child:
+                          _filteredLeases.isEmpty
+                              ? Center(
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
@@ -682,9 +693,7 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
                                       style: Theme.of(context)
                                           .textTheme
                                           .titleMedium
-                                          ?.copyWith(
-                                            color: Colors.grey[600],
-                                          ),
+                                          ?.copyWith(color: Colors.grey[600]),
                                     ),
                                     SizedBox(height: 1.h),
                                     Text(
@@ -692,14 +701,12 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodyMedium
-                                          ?.copyWith(
-                                            color: Colors.grey[500],
-                                          ),
+                                          ?.copyWith(color: Colors.grey[500]),
                                     ),
                                   ],
                                 ),
                               )
-                            : ListView.builder(
+                              : ListView.builder(
                                 padding: EdgeInsets.only(bottom: 2.w),
                                 itemCount: _filteredLeases.length,
                                 itemBuilder: (context, index) {
@@ -707,17 +714,30 @@ class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
                                   return _buildLeaseCard(lease);
                                 },
                               ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
+              ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Fonctionnalité en cours de développement'),
-            ),
+        onPressed: () async {
+          HapticFeedback.lightImpact();
+          final result = await Navigator.pushNamed(
+            context,
+            '/add-lease-form-screen',
           );
+
+          // Si bail créé avec succès, recharge la liste
+          if (result == true) {
+            await _loadLeases();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Liste des baux mise à jour'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          }
         },
         backgroundColor: Theme.of(context).primaryColor,
         child: const Icon(Icons.add, color: Colors.white),

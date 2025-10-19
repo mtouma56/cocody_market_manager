@@ -5,6 +5,7 @@ import 'package:sizer/sizer.dart';
 import '../../services/payments_service.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/custom_bottom_bar.dart';
+import '../add_payment_form_screen/add_payment_form_screen.dart';
 
 class PaymentsManagementScreen extends StatefulWidget {
   const PaymentsManagementScreen({super.key});
@@ -69,29 +70,28 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
 
   void _filterPayments() {
     setState(() {
-      _filteredPayments = _payments.where((payment) {
-        // Status filter
-        bool statusMatch = _selectedStatus == 'all' ||
-            (payment['status']?.toString() ?? '') == _selectedStatus;
+      _filteredPayments =
+          _payments.where((payment) {
+            // Status filter
+            bool statusMatch =
+                _selectedStatus == 'all' ||
+                (payment['status']?.toString() ?? '') == _selectedStatus;
 
-        // Search filter
-        bool searchMatch = _searchQuery.isEmpty ||
-            (payment['tenantName']?.toString() ?? '').toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ) ||
-            (payment['contractNumber']?.toString() ?? '')
-                .toLowerCase()
-                .contains(
-                  _searchQuery.toLowerCase(),
-                ) ||
-            (payment['propertyNumber']?.toString() ?? '')
-                .toLowerCase()
-                .contains(
-                  _searchQuery.toLowerCase(),
-                );
+            // Search filter
+            bool searchMatch =
+                _searchQuery.isEmpty ||
+                (payment['tenantName']?.toString() ?? '')
+                    .toLowerCase()
+                    .contains(_searchQuery.toLowerCase()) ||
+                (payment['contractNumber']?.toString() ?? '')
+                    .toLowerCase()
+                    .contains(_searchQuery.toLowerCase()) ||
+                (payment['propertyNumber']?.toString() ?? '')
+                    .toLowerCase()
+                    .contains(_searchQuery.toLowerCase());
 
-        return statusMatch && searchMatch;
-      }).toList();
+            return statusMatch && searchMatch;
+          }).toList();
 
       // Sort by urgency then by due date
       _filteredPayments.sort((a, b) {
@@ -149,101 +149,119 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
   void _showPaymentDetails(Map<String, dynamic> payment) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Paiement ${payment['monthConcerned'] ?? 'N/A'}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Locataire: ${payment['tenantName'] ?? 'N/A'}'),
-            Text('Activité: ${payment['tenantBusiness'] ?? 'N/A'}'),
-            Text(
-                'Local: ${payment['propertyNumber'] ?? 'N/A'} (${payment['propertyFloor'] ?? 'N/A'})'),
-            Text(
-                'Montant: ${_formatAmount((payment['amount'] as num?)?.toDouble() ?? 0)} FCFA'),
-            Text(
-                'Échéance: ${_formatDate(payment['dueDate']?.toString() ?? '')}'),
-            if (payment['paymentDate'] != null)
-              Text(
-                  'Payé le: ${_formatDate(payment['paymentDate']?.toString() ?? '')}'),
-            if (payment['paymentMethod'] != null)
-              Text(
-                  'Mode: ${_getPaymentMethodLabel(payment['paymentMethod']?.toString())}'),
-            Text('Statut: ${_getStatusLabel(payment['status']?.toString())}'),
-            Text('Contrat: ${payment['contractNumber'] ?? 'N/A'}'),
-            if (payment['notes']?.toString().isNotEmpty == true)
-              Text('Notes: ${payment['notes']}'),
-            if (payment['tenantPhone']?.toString().isNotEmpty == true)
-              Text('Téléphone: ${payment['tenantPhone']}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Fermer'),
+      builder:
+          (context) => AlertDialog(
+            title: Text('Paiement ${payment['monthConcerned'] ?? 'N/A'}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Locataire: ${payment['tenantName'] ?? 'N/A'}'),
+                Text('Activité: ${payment['tenantBusiness'] ?? 'N/A'}'),
+                Text(
+                  'Local: ${payment['propertyNumber'] ?? 'N/A'} (${payment['propertyFloor'] ?? 'N/A'})',
+                ),
+                Text(
+                  'Montant: ${_formatAmount((payment['amount'] as num?)?.toDouble() ?? 0)} FCFA',
+                ),
+                Text(
+                  'Échéance: ${_formatDate(payment['dueDate']?.toString() ?? '')}',
+                ),
+                if (payment['paymentDate'] != null)
+                  Text(
+                    'Payé le: ${_formatDate(payment['paymentDate']?.toString() ?? '')}',
+                  ),
+                if (payment['paymentMethod'] != null)
+                  Text(
+                    'Mode: ${_getPaymentMethodLabel(payment['paymentMethod']?.toString())}',
+                  ),
+                Text(
+                  'Statut: ${_getStatusLabel(payment['status']?.toString())}',
+                ),
+                Text('Contrat: ${payment['contractNumber'] ?? 'N/A'}'),
+                if (payment['notes']?.toString().isNotEmpty == true)
+                  Text('Notes: ${payment['notes']}'),
+                if (payment['tenantPhone']?.toString().isNotEmpty == true)
+                  Text('Téléphone: ${payment['tenantPhone']}'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Fermer'),
+              ),
+              if (payment['status'] == 'pending' ||
+                  payment['status'] == 'overdue')
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _markAsPaid(payment);
+                  },
+                  child: const Text('Marquer payé'),
+                ),
+              if (payment['tenantPhone']?.toString().isNotEmpty == true)
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _callTenant(payment['tenantPhone']?.toString() ?? '');
+                  },
+                  child: const Text('Appeler'),
+                ),
+            ],
           ),
-          if (payment['status'] == 'pending' || payment['status'] == 'overdue')
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _markAsPaid(payment);
-              },
-              child: const Text('Marquer payé'),
-            ),
-          if (payment['tenantPhone']?.toString().isNotEmpty == true)
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _callTenant(payment['tenantPhone']?.toString() ?? '');
-              },
-              child: const Text('Appeler'),
-            ),
-        ],
-      ),
     );
   }
 
   void _markAsPaid(Map<String, dynamic> payment) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirmer le paiement'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Marquer comme payé le paiement de ${_formatAmount((payment['amount'] as num?)?.toDouble() ?? 0)} FCFA pour ${payment['tenantName'] ?? 'N/A'} ?',
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(
-                labelText: 'Mode de paiement',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'cash', child: Text('Espèces')),
-                DropdownMenuItem(value: 'transfer', child: Text('Virement')),
-                DropdownMenuItem(
-                    value: 'mobile_money', child: Text('Mobile Money')),
-                DropdownMenuItem(value: 'check', child: Text('Chèque')),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Confirmer le paiement'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Marquer comme payé le paiement de ${_formatAmount((payment['amount'] as num?)?.toDouble() ?? 0)} FCFA pour ${payment['tenantName'] ?? 'N/A'} ?',
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(
+                    labelText: 'Mode de paiement',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'cash', child: Text('Espèces')),
+                    DropdownMenuItem(
+                      value: 'transfer',
+                      child: Text('Virement'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'mobile_money',
+                      child: Text('Mobile Money'),
+                    ),
+                    DropdownMenuItem(value: 'check', child: Text('Chèque')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      _updatePaymentStatus(
+                        payment['id']?.toString() ?? '',
+                        'paid',
+                        value,
+                      );
+                      Navigator.pop(context);
+                    }
+                  },
+                ),
               ],
-              onChanged: (value) {
-                if (value != null) {
-                  _updatePaymentStatus(
-                      payment['id']?.toString() ?? '', 'paid', value);
-                  Navigator.pop(context);
-                }
-              },
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Annuler'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -291,16 +309,20 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
     );
   }
 
-  void _showNewPaymentDialog() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Fonctionnalité en cours de développement'),
-      ),
+  void _showNewPaymentDialog() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AddPaymentFormScreen()),
     );
+    if (result == true) {
+      _loadPayments();
+    }
   }
 
   String _formatAmount(double amount) {
-    return amount.toStringAsFixed(0).replaceAllMapped(
+    return amount
+        .toStringAsFixed(0)
+        .replaceAllMapped(
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
           (Match m) => '${m[1]} ',
         );
@@ -375,24 +397,20 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.error_outline,
-            color: Colors.red,
-            size: 64,
-          ),
+          Icon(Icons.error_outline, color: Colors.red, size: 64),
           SizedBox(height: 2.h),
           Text(
             'Erreur de chargement',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Colors.red,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(color: Colors.red),
           ),
           SizedBox(height: 1.h),
           Text(
             _error ?? 'Une erreur est survenue',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
             textAlign: TextAlign.center,
           ),
           SizedBox(height: 2.h),
@@ -447,7 +465,12 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
   }
 
   Widget _buildMetricCard(
-      String title, String count, String subtitle, Color color, IconData icon) {
+    String title,
+    String count,
+    String subtitle,
+    Color color,
+    IconData icon,
+  ) {
     return Container(
       padding: EdgeInsets.all(3.w),
       decoration: BoxDecoration(
@@ -469,17 +492,11 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
           ),
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
           Text(
             subtitle,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 10,
-            ),
+            style: const TextStyle(color: Colors.white70, fontSize: 10),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -501,22 +518,24 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-          children: statuses.map((status) {
-            final isSelected = _selectedStatus == status['code'];
-            return Padding(
-              padding: EdgeInsets.only(right: 2.w),
-              child: FilterChip(
-                label: Text(status['label'] ?? ''),
-                selected: isSelected,
-                onSelected: (_) => _onStatusFilterChanged(status['code'] ?? ''),
-                backgroundColor: Colors.grey[200],
-                selectedColor: Theme.of(context).primaryColor,
-                labelStyle: TextStyle(
-                  color: isSelected ? Colors.white : Colors.black87,
-                ),
-              ),
-            );
-          }).toList(),
+          children:
+              statuses.map((status) {
+                final isSelected = _selectedStatus == status['code'];
+                return Padding(
+                  padding: EdgeInsets.only(right: 2.w),
+                  child: FilterChip(
+                    label: Text(status['label'] ?? ''),
+                    selected: isSelected,
+                    onSelected:
+                        (_) => _onStatusFilterChanged(status['code'] ?? ''),
+                    backgroundColor: Colors.grey[200],
+                    selectedColor: Theme.of(context).primaryColor,
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                );
+              }).toList(),
         ),
       ),
     );
@@ -543,12 +562,14 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
                   Text(
                     'Paiement ${payment['monthConcerned'] ?? 'N/A'}',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   Container(
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 2.w, vertical: 0.5.h),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 2.w,
+                      vertical: 0.5.h,
+                    ),
                     decoration: BoxDecoration(
                       color: urgencyColor,
                       borderRadius: BorderRadius.circular(12),
@@ -575,8 +596,8 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
                     child: Text(
                       payment['tenantName']?.toString() ?? 'N/A',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -603,23 +624,22 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
                   Text(
                     '${_formatAmount((payment['amount'] as num?)?.toDouble() ?? 0)} FCFA',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).primaryColor,
-                        ),
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).primaryColor,
+                    ),
                   ),
                   Container(
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 2.w, vertical: 0.5.h),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 2.w,
+                      vertical: 0.5.h,
+                    ),
                     decoration: BoxDecoration(
                       color: statusColor,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       _getStatusLabel(payment['status']?.toString()),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
                     ),
                   ),
                 ],
@@ -629,16 +649,16 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
               // Dates
               Text(
                 'Échéance: ${_formatDate(payment['dueDate']?.toString() ?? '')}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[600],
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
               ),
               if (payment['paymentDate'] != null)
                 Text(
                   'Payé le: ${_formatDate(payment['paymentDate']?.toString() ?? '')}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.green[600],
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.green[600]),
                 ),
             ],
           ),
@@ -730,69 +750,64 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      appBar: _isSearchActive
-          ? AppBar(
-              backgroundColor: Colors.white,
-              elevation: 1,
-              leading: IconButton(
-                onPressed: _toggleSearch,
-                icon: const Icon(Icons.arrow_back, color: Colors.black87),
-              ),
-              title: TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'Rechercher paiements...',
-                  border: InputBorder.none,
+      appBar:
+          _isSearchActive
+              ? AppBar(
+                backgroundColor: Colors.white,
+                elevation: 1,
+                leading: IconButton(
+                  onPressed: _toggleSearch,
+                  icon: const Icon(Icons.arrow_back, color: Colors.black87),
                 ),
-                onChanged: _onSearchChanged,
-              ),
-              actions: [
-                if (_searchController.text.isNotEmpty)
-                  IconButton(
-                    onPressed: () {
-                      _searchController.clear();
-                      _onSearchChanged('');
-                    },
-                    icon: const Icon(Icons.clear, color: Colors.black87),
+                title: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Rechercher paiements...',
+                    border: InputBorder.none,
                   ),
-              ],
-            )
-          : CustomAppBar(
-              title: 'Paiements',
-              variant: CustomAppBarVariant.withActions,
-              onSearchPressed: _toggleSearch,
-            ),
+                  onChanged: _onSearchChanged,
+                ),
+                actions: [
+                  if (_searchController.text.isNotEmpty)
+                    IconButton(
+                      onPressed: () {
+                        _searchController.clear();
+                        _onSearchChanged('');
+                      },
+                      icon: const Icon(Icons.clear, color: Colors.black87),
+                    ),
+                ],
+              )
+              : CustomAppBar(
+                title: 'Paiements',
+                variant: CustomAppBarVariant.withActions,
+                onSearchPressed: _toggleSearch,
+              ),
       drawer: Drawer(
         backgroundColor: Colors.white,
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
             DrawerHeader(
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
-              ),
+              decoration: BoxDecoration(color: Theme.of(context).primaryColor),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.payment,
-                    color: Colors.white,
-                    size: 40,
-                  ),
+                  const Icon(Icons.payment, color: Colors.white, size: 40),
                   SizedBox(height: 1.h),
                   Text(
                     'Cocody Market Manager',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   Text(
                     'Gestion des paiements',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white70,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
                   ),
                 ],
               ),
@@ -830,8 +845,10 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
               },
             ),
             ListTile(
-              leading:
-                  Icon(Icons.payment, color: Theme.of(context).primaryColor),
+              leading: Icon(
+                Icons.payment,
+                color: Theme.of(context).primaryColor,
+              ),
               title: const Text('Paiements'),
               selected: true,
               selectedTileColor: Theme.of(context).primaryColor.withAlpha(26),
@@ -849,59 +866,62 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
           ],
         ),
       ),
-      body: _isLoading
-          ? _buildLoadingState()
-          : _error != null
+      body:
+          _isLoading
+              ? _buildLoadingState()
+              : _error != null
               ? _buildErrorState()
               : RefreshIndicator(
-                  onRefresh: _onRefresh,
-                  color: Theme.of(context).primaryColor,
-                  child: Column(
-                    children: [
-                      // Metrics cards
-                      _buildMetricsCards(),
+                onRefresh: _onRefresh,
+                color: Theme.of(context).primaryColor,
+                child: Column(
+                  children: [
+                    // Metrics cards
+                    _buildMetricsCards(),
 
-                      // Status filter chips
-                      _buildStatusFilterChips(),
+                    // Status filter chips
+                    _buildStatusFilterChips(),
 
-                      // Payments count
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 4.w, vertical: 1.h),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              '${_filteredPayments.length} paiement${_filteredPayments.length > 1 ? 's' : ''} trouvé${_filteredPayments.length > 1 ? 's' : ''}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
-                                    color: Colors.grey[600],
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                            ),
-                            if (_selectedStatus != 'all' ||
-                                _searchQuery.isNotEmpty)
-                              TextButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedStatus = 'all';
-                                    _searchQuery = '';
-                                    _searchController.clear();
-                                  });
-                                  _filterPayments();
-                                },
-                                child: const Text('Effacer filtres'),
-                              ),
-                          ],
-                        ),
+                    // Payments count
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 4.w,
+                        vertical: 1.h,
                       ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '${_filteredPayments.length} paiement${_filteredPayments.length > 1 ? 's' : ''} trouvé${_filteredPayments.length > 1 ? 's' : ''}',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          if (_selectedStatus != 'all' ||
+                              _searchQuery.isNotEmpty)
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _selectedStatus = 'all';
+                                  _searchQuery = '';
+                                  _searchController.clear();
+                                });
+                                _filterPayments();
+                              },
+                              child: const Text('Effacer filtres'),
+                            ),
+                        ],
+                      ),
+                    ),
 
-                      // Payments list
-                      Expanded(
-                        child: _filteredPayments.isEmpty
-                            ? Center(
+                    // Payments list
+                    Expanded(
+                      child:
+                          _filteredPayments.isEmpty
+                              ? Center(
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
@@ -916,9 +936,7 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
                                       style: Theme.of(context)
                                           .textTheme
                                           .titleMedium
-                                          ?.copyWith(
-                                            color: Colors.grey[600],
-                                          ),
+                                          ?.copyWith(color: Colors.grey[600]),
                                     ),
                                     SizedBox(height: 1.h),
                                     Text(
@@ -926,14 +944,12 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodyMedium
-                                          ?.copyWith(
-                                            color: Colors.grey[500],
-                                          ),
+                                          ?.copyWith(color: Colors.grey[500]),
                                     ),
                                   ],
                                 ),
                               )
-                            : ListView.builder(
+                              : ListView.builder(
                                 padding: EdgeInsets.only(bottom: 2.w),
                                 itemCount: _filteredPayments.length,
                                 itemBuilder: (context, index) {
@@ -941,10 +957,10 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
                                   return _buildPaymentCard(payment);
                                 },
                               ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
+              ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showNewPaymentDialog,
         backgroundColor: Theme.of(context).primaryColor,
