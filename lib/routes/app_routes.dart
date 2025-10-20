@@ -4,6 +4,8 @@ import '../presentation/splash_screen/splash_screen.dart';
 import '../presentation/login_screen/login_screen.dart';
 import '../presentation/properties_management_screen/properties_management_screen.dart';
 import '../presentation/merchants_management_screen/merchants_management_screen.dart';
+import '../presentation/merchant_details_screen/merchant_details_screen.dart';
+import '../presentation/property_details_screen/property_details_screen.dart';
 import '../presentation/lease_management_screen/lease_management_screen.dart';
 import '../presentation/add_lease_form_screen/add_lease_form_screen.dart';
 import '../presentation/payments_management_screen/payments_management_screen.dart';
@@ -19,6 +21,8 @@ class AppRoutes {
       '/properties-management-screen';
   static const String merchantsManagementScreen =
       '/merchants-management-screen';
+  static const String merchantDetailsScreen = '/merchant-details-screen';
+  static const String propertyDetailsScreen = '/property-details-screen';
   static const String leaseManagementScreen = '/lease-management-screen';
   static const String addLeaseFormScreen = '/add-lease-form-screen';
   static const String paymentsManagementScreen = '/payments-management-screen';
@@ -33,12 +37,22 @@ class AppRoutes {
     dashboardScreen: (context) => const DashboardScreen(),
     propertiesManagementScreen: (context) => const PropertiesManagementScreen(),
     merchantsManagementScreen: (context) => const MerchantsManagementScreen(),
+    merchantDetailsScreen: (context) {
+      final merchantId =
+          ModalRoute.of(context)!.settings.arguments as String? ?? '';
+      return MerchantDetailsScreen(merchantId: merchantId);
+    },
+    propertyDetailsScreen: (context) {
+      final propertyId =
+          ModalRoute.of(context)!.settings.arguments as String? ?? '';
+      return PropertyDetailsScreen(propertyId: propertyId);
+    },
     leaseManagementScreen: (context) => const LeaseManagementScreen(),
     addLeaseFormScreen: (context) => const AddLeaseFormScreen(),
     paymentsManagementScreen: (context) => const PaymentsManagementScreen(),
     addPaymentFormScreen: (context) => const AddPaymentFormScreen(),
-    paymentServiceIntegrationScreen:
-        (context) => const PaymentServiceIntegrationScreen(),
+    paymentServiceIntegrationScreen: (context) =>
+        const PaymentServiceIntegrationScreen(),
     settingsScreen: (context) => const SettingsScreen(),
   };
 }

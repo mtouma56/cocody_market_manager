@@ -155,11 +155,10 @@ class _PropertiesManagementScreenState
 
   void _onPropertyTap(Map<String, dynamic> property) {
     HapticFeedback.lightImpact();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Local ${property['number']} sélectionné'),
-        duration: const Duration(seconds: 1),
-      ),
+    Navigator.pushNamed(
+      context,
+      AppRoutes.propertyDetailsScreen,
+      arguments: property['id'],
     );
   }
 

@@ -349,4 +349,79 @@ class PropertiesService {
     final safeEtage = etageNom ?? 'Rez-de-chaussée';
     return '$safeType situé au $safeEtage du Marché Cocody Saint-Jean';
   }
+
+  /// Récupère les détails complets d'un local
+  Future<Map<String, dynamic>> getPropertyDetails(String localId) async {
+    try {
+      print('🔍 Récupération détails local: id=$localId');
+
+      // Récupère les informations du local avec toutes les relations
+      final local = await _supabase.from('locaux').select('''
+            *,
+            types_locaux(*),
+            etages(*),
+            baux(
+              *,
+              commercants(*)
+            )
+          ''').eq('id', localId).single();
+
+      // Récupère l'historique des paiements pour ce local
+      final paiements = await _supabase
+          .from('paiements')
+          .select('''
+            *,
+            baux!inner(
+              commercant_id,
+              locaux!inner(id)
+            )
+          ''')
+          .eq('baux.locaux.id', localId)
+          .order('date_paiement', ascending: false);
+
+      // Calcule les statistiques
+      final totalPaiements = paiements.length;
+      final paiementsPayes =
+          paiements.where((p) => p['statut'] == 'Payé').length;
+      final montantTotal = paiements
+          .where((p) => p['statut'] == 'Payé')
+          .fold<double>(
+              0, (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0));
+
+      final paiementsEnRetard =
+          paiements.where((p) => p['statut'] == 'En retard').length;
+      final montantEnRetard = paiements
+          .where((p) => p['statut'] == 'En retard')
+          .fold<double>(
+              0, (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0));
+
+      // Récupère le bail actif s'il existe
+      final bailActif = (local['baux'] as List?)?.firstWhere(
+        (b) => b['statut'] == 'Actif',
+        orElse: () => null,
+      );
+
+      print('✅ Détails local récupérés avec succès');
+
+      return {
+        'local': local,
+        'bail_actif': bailActif,
+        'paiements': paiements.take(20).toList(), // Limité aux 20 derniers
+        'stats': {
+          'total_paiements': totalPaiements,
+          'paiements_payes': paiementsPayes,
+          'montant_total': montantTotal,
+          'paiements_en_retard': paiementsEnRetard,
+          'montant_en_retard': montantEnRetard,
+          'taux_paiement': totalPaiements > 0
+              ? (paiementsPayes / totalPaiements * 100)
+              : 0.0,
+        },
+      };
+    } catch (e, stackTrace) {
+      print('❌ ERREUR getPropertyDetails: $e');
+      print('Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
 }
