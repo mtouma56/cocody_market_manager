@@ -79,6 +79,12 @@ class _CustomBottomBarState extends State<CustomBottomBar> {
       label: 'Payments',
       route: '/payments-management-screen',
     ),
+    _BottomNavItem(
+      icon: Icons.assessment_outlined,
+      selectedIcon: Icons.assessment,
+      label: 'Reports',
+      route: '/reports-screen',
+    ),
   ];
 
   @override

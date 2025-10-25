@@ -31,6 +31,11 @@ class _PropertiesManagementScreenState
   bool _isLoading = true;
   String? _error;
 
+  // New filter and sort state
+  List<StatusFilter> _statusFilters = [StatusFilter.all];
+  SortOption _currentSort = SortOption.propertyNumber;
+  bool _sortAscending = true;
+
   final PropertiesService _propertiesService = PropertiesService();
 
   @override
@@ -52,7 +57,22 @@ class _PropertiesManagementScreenState
         _error = null;
       });
 
-      final properties = await _propertiesService.getAllProperties();
+      // Convert status filters to API format
+      List<String>? apiStatusFilters;
+      if (!_statusFilters.contains(StatusFilter.all)) {
+        apiStatusFilters = _statusFilters
+            .map((filter) => _convertStatusFilterToApi(filter))
+            .toList();
+      }
+
+      // Convert sort option to API format
+      String sortBy = _convertSortOptionToApi(_currentSort);
+
+      final properties = await _propertiesService.getAllProperties(
+        statusFilters: apiStatusFilters,
+        sortBy: sortBy,
+        ascending: _sortAscending,
+      );
 
       setState(() {
         _properties = properties;
@@ -134,6 +154,51 @@ class _PropertiesManagementScreenState
       }
     });
     HapticFeedback.lightImpact();
+  }
+
+  // New filter and sort handlers
+  void _onFiltersChanged(List<StatusFilter> filters) {
+    setState(() {
+      _statusFilters = filters;
+    });
+    _loadProperties();
+    HapticFeedback.lightImpact();
+  }
+
+  void _onSortChanged(SortOption sortOption, bool ascending) {
+    setState(() {
+      _currentSort = sortOption;
+      _sortAscending = ascending;
+    });
+    _loadProperties();
+    HapticFeedback.lightImpact();
+  }
+
+  String _convertStatusFilterToApi(StatusFilter filter) {
+    switch (filter) {
+      case StatusFilter.available:
+        return 'available';
+      case StatusFilter.occupied:
+        return 'occupied';
+      case StatusFilter.maintenance:
+        return 'maintenance';
+      case StatusFilter.all:
+      default:
+        return 'all';
+    }
+  }
+
+  String _convertSortOptionToApi(SortOption option) {
+    switch (option) {
+      case SortOption.propertyNumber:
+        return 'numero';
+      case SortOption.propertyType:
+        return 'type';
+      case SortOption.floor:
+        return 'floor';
+      case SortOption.status:
+        return 'statut';
+    }
   }
 
   Future<void> _onPropertyAdded(Map<String, dynamic> newProperty) async {
@@ -493,6 +558,11 @@ class _PropertiesManagementScreenState
               title: 'Locaux',
               variant: CustomAppBarVariant.withActions,
               onSearchPressed: _toggleSearch,
+              onFilterChanged: _onFiltersChanged,
+              onSortChanged: _onSortChanged,
+              currentFilters: _statusFilters,
+              currentSortOption: _currentSort,
+              currentSortAscending: _sortAscending,
             ),
       drawer: Drawer(
         backgroundColor: AppTheme.lightTheme.colorScheme.surface,

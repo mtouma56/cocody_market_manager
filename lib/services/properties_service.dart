@@ -17,22 +17,28 @@ class PropertiesService {
   }) async {
     try {
       print(
-          '🚀 Création local: numero=$numero, type=$typeId, etage=$etageId, statut=$statut');
+        '🚀 Création local: numero=$numero, type=$typeId, etage=$etageId, statut=$statut',
+      );
 
       // INSERT dans Supabase
-      final response = await _supabase.from('locaux').insert({
-        'numero': numero,
-        'type_id': typeId,
-        'etage_id': etageId,
-        'statut': statut,
-        'actif': actif,
-        'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-      }).select('''
+      final response =
+          await _supabase
+              .from('locaux')
+              .insert({
+                'numero': numero,
+                'type_id': typeId,
+                'etage_id': etageId,
+                'statut': statut,
+                'actif': actif,
+                'created_at': DateTime.now().toIso8601String(),
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .select('''
             *,
             types_locaux(*),
             etages(*)
-          ''').single();
+          ''')
+              .single();
 
       print('✅ Local créé avec succès: ${response['numero']}');
 
@@ -131,9 +137,15 @@ class PropertiesService {
   }
 
   /// Récupère tous les locaux avec leurs informations complètes
-  Future<List<Map<String, dynamic>>> getAllProperties() async {
+  Future<List<Map<String, dynamic>>> getAllProperties({
+    List<String>? statusFilters,
+    String? sortBy = 'numero',
+    bool ascending = true,
+  }) async {
     try {
-      final response = await _supabase.from('locaux').select('''
+      var query = _supabase
+          .from('locaux')
+          .select('''
         id,
         numero,
         statut,
@@ -145,40 +157,60 @@ class PropertiesService {
           statut,
           commercants!inner(nom, activite, contact)
         )
-      ''').eq('actif', true).order('numero');
+      ''')
+          .eq('actif', true);
 
-      List<Map<String, dynamic>> properties = [];
+      // Apply status filters if provided
+      if (statusFilters != null && statusFilters.isNotEmpty) {
+        if (!statusFilters.contains('all')) {
+          final supabaseStatuses =
+              statusFilters
+                  .map((status) => _getSupabaseStatusFromFilter(status))
+                  .toList();
+          query = query.inFilter('statut', supabaseStatuses);
+        }
+      }
 
-      for (var local in response) {
-        // Déterminer l'étage en format court
-        String floorCode = _getFloorCode(local['etages']['ordre']);
+      // Fetch data first, then sort client-side for joined table columns
+      final response = await query.order('numero', ascending: true);
+      List<Map<String, dynamic>> properties = _processPropertiesResponse(
+        response,
+      );
 
-        // Déterminer le type en format code
-        String typeCode = _getPropertyTypeCode(local['types_locaux']['nom']);
+      // Apply client-side sorting based on sortBy parameter
+      properties.sort((a, b) {
+        int comparison = 0;
 
-        // Préparer les données du locataire s'il y en a un
-        Map<String, dynamic>? tenant;
-        if (local['baux'] != null && local['baux'].isNotEmpty) {
-          final bail = local['baux'][0];
-          if (bail['statut'] == 'Actif' && bail['commercants'] != null) {
-            tenant = {
-              'name': bail['commercants']['nom'],
-              'business': bail['commercants']['activite'],
-              'phone': bail['commercants']['contact'],
-            };
-          }
+        switch (sortBy) {
+          case 'numero':
+            // Extract numeric part for natural sorting
+            final aNum = _extractNumber(a['number']);
+            final bNum = _extractNumber(b['number']);
+            comparison = aNum.compareTo(bNum);
+            break;
+          case 'type':
+            final aType = _getPropertyTypeLabel(a['type']) ?? '';
+            final bType = _getPropertyTypeLabel(b['type']) ?? '';
+            comparison = aType.compareTo(bType);
+            break;
+          case 'floor':
+            final aFloor = _getFloorOrder(a['floor']);
+            final bFloor = _getFloorOrder(b['floor']);
+            comparison = aFloor.compareTo(bFloor);
+            break;
+          case 'statut':
+            final aStatus = _getStatusLabel(a['status']);
+            final bStatus = _getStatusLabel(b['status']);
+            comparison = aStatus.compareTo(bStatus);
+            break;
+          default:
+            final aNum = _extractNumber(a['number']);
+            final bNum = _extractNumber(b['number']);
+            comparison = aNum.compareTo(bNum);
         }
 
-        properties.add({
-          'id': local['id'],
-          'number': local['numero'],
-          'floor': floorCode,
-          'type': typeCode,
-          'size': '${local['types_locaux']['surface_m2']}m²',
-          'status': _getStatusCode(local['statut']),
-          if (tenant != null) 'tenant': tenant,
-        });
-      }
+        return ascending ? comparison : -comparison;
+      });
 
       return properties;
     } catch (error) {
@@ -187,13 +219,59 @@ class PropertiesService {
     }
   }
 
-  /// Récupère les locaux par étage
+  // Add this helper method
+  List<Map<String, dynamic>> _processPropertiesResponse(
+    List<Map<String, dynamic>> response,
+  ) {
+    List<Map<String, dynamic>> properties = [];
+
+    for (var local in response) {
+      // Déterminer l'étage en format court
+      String floorCode = _getFloorCode(local['etages']['ordre']);
+
+      // Déterminer le type en format code
+      String typeCode = _getPropertyTypeCode(local['types_locaux']['nom']);
+
+      // Préparer les données du locataire s'il y en a un
+      Map<String, dynamic>? tenant;
+      if (local['baux'] != null && local['baux'].isNotEmpty) {
+        final bail = local['baux'][0];
+        if (bail['statut'] == 'Actif' && bail['commercants'] != null) {
+          tenant = {
+            'name': bail['commercants']['nom'],
+            'business': bail['commercants']['activite'],
+            'phone': bail['commercants']['contact'],
+          };
+        }
+      }
+
+      properties.add({
+        'id': local['id'],
+        'number': local['numero'],
+        'floor': floorCode,
+        'type': typeCode,
+        'size': '${local['types_locaux']['surface_m2']}m²',
+        'status': _getStatusCode(local['statut']),
+        if (tenant != null) 'tenant': tenant,
+      });
+    }
+
+    return properties;
+  }
+
+  /// Récupère les locaux par étage avec filtres et tri
   Future<List<Map<String, dynamic>>> getPropertiesByFloor(
-      String floorCode) async {
+    String floorCode, {
+    List<String>? statusFilters,
+    String? sortBy = 'numero',
+    bool ascending = true,
+  }) async {
     try {
       int ordre = _getFloorOrder(floorCode);
 
-      final response = await _supabase.from('locaux').select('''
+      var query = _supabase
+          .from('locaux')
+          .select('''
         id,
         numero,
         statut,
@@ -205,42 +283,100 @@ class PropertiesService {
           statut,
           commercants!inner(nom, activite, contact)
         )
-      ''').eq('actif', true).eq('etages.ordre', ordre).order('numero');
+      ''')
+          .eq('actif', true)
+          .eq('etages.ordre', ordre);
 
-      List<Map<String, dynamic>> properties = [];
+      // Apply status filters if provided
+      if (statusFilters != null && statusFilters.isNotEmpty) {
+        if (!statusFilters.contains('all')) {
+          final supabaseStatuses =
+              statusFilters
+                  .map((status) => _getSupabaseStatusFromFilter(status))
+                  .toList();
+          query = query.inFilter('statut', supabaseStatuses);
+        }
+      }
 
-      for (var local in response) {
-        String typeCode = _getPropertyTypeCode(local['types_locaux']['nom']);
+      // Fetch data first, then sort client-side
+      final response = await query.order('numero', ascending: true);
+      List<Map<String, dynamic>> properties = _processFloorPropertiesResponse(
+        response,
+        floorCode,
+      );
 
-        Map<String, dynamic>? tenant;
-        if (local['baux'] != null && local['baux'].isNotEmpty) {
-          final bail = local['baux'][0];
-          if (bail['statut'] == 'Actif' && bail['commercants'] != null) {
-            tenant = {
-              'name': bail['commercants']['nom'],
-              'business': bail['commercants']['activite'],
-              'phone': bail['commercants']['contact'],
-            };
-          }
+      // Apply client-side sorting based on sortBy parameter
+      properties.sort((a, b) {
+        int comparison = 0;
+
+        switch (sortBy) {
+          case 'numero':
+            final aNum = _extractNumber(a['number']);
+            final bNum = _extractNumber(b['number']);
+            comparison = aNum.compareTo(bNum);
+            break;
+          case 'type':
+            final aType = _getPropertyTypeLabel(a['type']) ?? '';
+            final bType = _getPropertyTypeLabel(b['type']) ?? '';
+            comparison = aType.compareTo(bType);
+            break;
+          case 'statut':
+            final aStatus = _getStatusLabel(a['status']);
+            final bStatus = _getStatusLabel(b['status']);
+            comparison = aStatus.compareTo(bStatus);
+            break;
+          default:
+            final aNum = _extractNumber(a['number']);
+            final bNum = _extractNumber(b['number']);
+            comparison = aNum.compareTo(bNum);
         }
 
-        properties.add({
-          'id': local['id'],
-          'number': local['numero'],
-          'floor': floorCode,
-          'type': typeCode,
-          'size': '${local['types_locaux']['surface_m2']}m²',
-          'status': _getStatusCode(local['statut']),
-          if (tenant != null) 'tenant': tenant,
-        });
-      }
+        return ascending ? comparison : -comparison;
+      });
 
       return properties;
     } catch (error) {
       print('❌ ERREUR getPropertiesByFloor: $error');
       throw Exception(
-          'Erreur lors de la récupération des locaux par étage: $error');
+        'Erreur lors de la récupération des locaux par étage: $error',
+      );
     }
+  }
+
+  // Add this helper method
+  List<Map<String, dynamic>> _processFloorPropertiesResponse(
+    List<Map<String, dynamic>> response,
+    String floorCode,
+  ) {
+    List<Map<String, dynamic>> properties = [];
+
+    for (var local in response) {
+      String typeCode = _getPropertyTypeCode(local['types_locaux']['nom']);
+
+      Map<String, dynamic>? tenant;
+      if (local['baux'] != null && local['baux'].isNotEmpty) {
+        final bail = local['baux'][0];
+        if (bail['statut'] == 'Actif' && bail['commercants'] != null) {
+          tenant = {
+            'name': bail['commercants']['nom'],
+            'business': bail['commercants']['activite'],
+            'phone': bail['commercants']['contact'],
+          };
+        }
+      }
+
+      properties.add({
+        'id': local['id'],
+        'number': local['numero'],
+        'floor': floorCode,
+        'type': typeCode,
+        'size': '${local['types_locaux']['surface_m2']}m²',
+        'status': _getStatusCode(local['statut']),
+        if (tenant != null) 'tenant': tenant,
+      });
+    }
+
+    return properties;
   }
 
   /// Met à jour le statut d'un local
@@ -250,12 +386,27 @@ class PropertiesService {
 
       await _supabase
           .from('locaux')
-          .update({'statut': supabaseStatus}).eq('id', propertyId);
+          .update({'statut': supabaseStatus})
+          .eq('id', propertyId);
 
       print('✅ Statut du local $propertyId mis à jour vers $supabaseStatus');
     } catch (error) {
       print('❌ ERREUR updatePropertyStatus: $error');
       throw Exception('Erreur lors de la mise à jour du statut: $error');
+    }
+  }
+
+  /// Convertit les filtres de statut en statuts Supabase
+  String _getSupabaseStatusFromFilter(String filterStatus) {
+    switch (filterStatus) {
+      case 'available':
+        return 'Disponible';
+      case 'occupied':
+        return 'Occupé';
+      case 'maintenance':
+        return 'Maintenance';
+      default:
+        return 'Disponible';
     }
   }
 
@@ -356,7 +507,10 @@ class PropertiesService {
       print('🔍 Récupération détails local: id=$localId');
 
       // Récupère les informations du local avec toutes les relations
-      final local = await _supabase.from('locaux').select('''
+      final local =
+          await _supabase
+              .from('locaux')
+              .select('''
             *,
             types_locaux(*),
             etages(*),
@@ -364,7 +518,9 @@ class PropertiesService {
               *,
               commercants(*)
             )
-          ''').eq('id', localId).single();
+          ''')
+              .eq('id', localId)
+              .single();
 
       // Récupère l'historique des paiements pour ce local
       final paiements = await _supabase
@@ -386,14 +542,18 @@ class PropertiesService {
       final montantTotal = paiements
           .where((p) => p['statut'] == 'Payé')
           .fold<double>(
-              0, (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0));
+            0,
+            (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
+          );
 
       final paiementsEnRetard =
           paiements.where((p) => p['statut'] == 'En retard').length;
       final montantEnRetard = paiements
           .where((p) => p['statut'] == 'En retard')
           .fold<double>(
-              0, (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0));
+            0,
+            (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
+          );
 
       // Récupère le bail actif s'il existe
       final bailActif = (local['baux'] as List?)?.firstWhere(
@@ -413,15 +573,57 @@ class PropertiesService {
           'montant_total': montantTotal,
           'paiements_en_retard': paiementsEnRetard,
           'montant_en_retard': montantEnRetard,
-          'taux_paiement': totalPaiements > 0
-              ? (paiementsPayes / totalPaiements * 100)
-              : 0.0,
+          'taux_paiement':
+              totalPaiements > 0
+                  ? (paiementsPayes / totalPaiements * 100)
+                  : 0.0,
         },
       };
     } catch (e, stackTrace) {
       print('❌ ERREUR getPropertyDetails: $e');
       print('Stack trace: $stackTrace');
       rethrow;
+    }
+  }
+
+  /// Extrait le numéro d'un identifiant de local pour le tri naturel
+  int _extractNumber(String propertyNumber) {
+    final regex = RegExp(r'\d+');
+    final match = regex.firstMatch(propertyNumber);
+    return match != null ? int.tryParse(match.group(0)!) ?? 0 : 0;
+  }
+
+  /// Obtient le label complet du type de local
+  String _getPropertyTypeLabel(String? typeCode) {
+    switch (typeCode) {
+      case '9m2_shop':
+        return 'Boutique 9m²';
+      case '4.5m2_shop':
+        return 'Boutique 4.5m²';
+      case 'restaurant':
+        return 'Restaurant';
+      case 'bank':
+        return 'Banque';
+      case 'box':
+        return 'Box';
+      case 'market_stall':
+        return 'Étal Marché';
+      default:
+        return 'Local Commercial';
+    }
+  }
+
+  /// Obtient le label complet du statut
+  String _getStatusLabel(String status) {
+    switch (status) {
+      case 'available':
+        return 'Disponible';
+      case 'occupied':
+        return 'Occupé';
+      case 'maintenance':
+        return 'Maintenance';
+      default:
+        return 'Inconnu';
     }
   }
 }

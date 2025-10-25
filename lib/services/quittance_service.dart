@@ -3,10 +3,14 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class QuittanceService {
-  /// Génère et affiche directement la quittance PDF
-  Future<void> genererQuittance(Map<String, dynamic> paiement) async {
+  final supabase = Supabase.instance.client;
+
+  /// Génère et affiche directement la quittance PDF avec enregistrement historique
+  Future<void> genererQuittance(Map<String, dynamic> paiement,
+      {bool isPartiel = false, bool isReimpression = false}) async {
     try {
       // Extraire données
       final bail = paiement['baux'] as Map<String, dynamic>?;
@@ -14,20 +18,46 @@ class QuittanceService {
       final local = bail?['locaux'] as Map<String, dynamic>?;
 
       final montant = (paiement['montant'] as num?)?.toDouble() ?? 0;
+      final montantPaye =
+          isPartiel ? montant * 0.5 : montant; // Exemple: 50% pour partiel
+      final resteDu = isPartiel ? montant - montantPaye : null;
       final moisConcerne = paiement['mois_concerne'] ?? '';
       final modePaiement = paiement['mode_paiement'] ?? '';
       final nomCommercant = commercant?['nom'] ?? '';
       final numeroLocal = local?['numero'] ?? '';
+      final statut = paiement['statut'] ?? '';
 
       // N° quittance : QUIT-{8 premiers chars de l'ID}
       final numeroQuittance =
           'QUIT-${paiement['id'].toString().substring(0, 8)}';
 
+      // Enregistre dans historique APRÈS l'extraction des données mais AVANT la génération PDF
+      // Enregistre SEULEMENT si nouvelle génération (pas réimpression)
+      if (!isReimpression) {
+        final typeDocument = isPartiel ? 'Reçu partiel' : 'Quittance';
+
+        try {
+          await supabase.from('quittances_historique').insert({
+            'paiement_id': paiement['id'],
+            'numero_quittance': numeroQuittance,
+            'type_document': typeDocument,
+            'montant_documente': isPartiel ? montantPaye : montant,
+            'reste_du': isPartiel ? resteDu : null,
+            'statut_paiement': statut,
+            'genere_par': 'MICHAEL TOUMA',
+          });
+
+          print('✅ Document enregistré en historique');
+        } catch (e) {
+          print('⚠️ Erreur historique: $e (continue quand même)');
+        }
+      }
+
       // Conversion du mois "2025-01" → "Janvier 2025"
       final moisFormate = _formatMois(moisConcerne);
 
       // Montant formaté "40500" → "40 500 FCFA"
-      final montantFormate = _formatMontant(montant);
+      final montantFormate = _formatMontant(isPartiel ? montantPaye : montant);
 
       // Date et heure actuelles
       final now = DateTime.now();
@@ -43,7 +73,7 @@ class QuittanceService {
 
       // Charger le logo
       final logoData = await rootBundle.load(
-        'assets/images/logo_adam_tp-1761380059966.jpg',
+        'assets/images/logo_adam_tp-1761388211763.jpg',
       );
       final logoImage = pw.MemoryImage(logoData.buffer.asUint8List());
 
@@ -67,6 +97,8 @@ class QuittanceService {
                   modePaiement: modePaiement,
                   dateImpression: dateImpression,
                   heureImpression: heureImpression,
+                  isPartiel: isPartiel,
+                  resteDu: resteDu,
                 ),
 
                 pw.SizedBox(height: 25), // Réduction de l'espacement
@@ -99,6 +131,8 @@ class QuittanceService {
                   modePaiement: modePaiement,
                   dateImpression: dateImpression,
                   heureImpression: heureImpression,
+                  isPartiel: isPartiel,
+                  resteDu: resteDu,
                 ),
               ],
             );
@@ -120,7 +154,7 @@ class QuittanceService {
     }
   }
 
-  /// Construit une quittance selon le modèle amélioré
+  /// Construit une quittance selon le modèle amélioré avec support partiel
   pw.Widget _buildQuittance({
     required pw.Font font,
     required pw.Font fontBold,
@@ -133,6 +167,8 @@ class QuittanceService {
     required String modePaiement,
     required String dateImpression,
     required String heureImpression,
+    bool isPartiel = false,
+    double? resteDu,
   }) {
     return pw.Container(
       width: double.infinity,
@@ -187,10 +223,10 @@ class QuittanceService {
           ),
 
           pw.SizedBox(height: 8), // Réduction de l'espacement
-          // TITRE QUITTANCE DE LOYER
+          // TITRE QUITTANCE DE LOYER OU REÇU PARTIEL
           pw.Center(
             child: pw.Text(
-              'QUITTANCE DE LOYER',
+              isPartiel ? 'REÇU PARTIEL' : 'QUITTANCE DE LOYER',
               style: pw.TextStyle(
                 font: fontBold,
                 fontSize: 16,
@@ -223,7 +259,7 @@ class QuittanceService {
                     pw.Container(
                       padding: const pw.EdgeInsets.all(4),
                       child: pw.Text(
-                        'Détail de votre quittance n°',
+                        'Détail de votre ${isPartiel ? "reçu" : "quittance"} n°',
                         style: pw.TextStyle(font: fontBold, fontSize: 10),
                         textAlign: pw.TextAlign.center,
                       ),
@@ -283,7 +319,7 @@ class QuittanceService {
                     pw.Container(
                       padding: const pw.EdgeInsets.all(4),
                       child: pw.Text(
-                        'Loyer de $moisFormate',
+                        '${isPartiel ? "Paiement partiel" : "Loyer de"} $moisFormate',
                         style: pw.TextStyle(font: font, fontSize: 10),
                         textAlign: pw.TextAlign.center,
                       ),
@@ -299,13 +335,46 @@ class QuittanceService {
                   ],
                 ),
 
-                // LIGNE 3 - TOTAL
+                // LIGNE 3 - RESTE DÛ (si partiel)
+                if (isPartiel && resteDu != null)
+                  pw.TableRow(
+                    children: [
+                      pw.Container(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(
+                          'RESTE DÛ',
+                          style: pw.TextStyle(
+                              font: fontBold,
+                              fontSize: 10,
+                              color: PdfColors.red),
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ),
+                      pw.Container(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(
+                          _formatMontant(resteDu),
+                          style: pw.TextStyle(
+                              font: fontBold,
+                              fontSize: 12,
+                              color: PdfColors.red),
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ),
+                      pw.Container(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text('', style: pw.TextStyle(font: font)),
+                      ),
+                    ],
+                  ),
+
+                // LIGNE FINALE - TOTAL
                 pw.TableRow(
                   children: [
                     pw.Container(
                       padding: const pw.EdgeInsets.all(4),
                       child: pw.Text(
-                        'TOTAL QUITTANCE',
+                        'TOTAL ${isPartiel ? "REÇU PARTIEL" : "QUITTANCE"}',
                         style: pw.TextStyle(font: fontBold, fontSize: 10),
                         textAlign: pw.TextAlign.center,
                       ),

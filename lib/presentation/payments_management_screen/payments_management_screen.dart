@@ -45,6 +45,17 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
 
       print('✅ ${response.length} paiements chargés');
 
+      // Debug: Afficher les statuts des paiements chargés
+      print('📋 Statuts trouvés:');
+      final statutCounts = <String, int>{};
+      for (final paiement in response) {
+        final statut = paiement['statut']?.toString() ?? 'Inconnu';
+        statutCounts[statut] = (statutCounts[statut] ?? 0) + 1;
+      }
+      statutCounts.forEach((statut, count) {
+        print('   $statut: $count paiements');
+      });
+
       setState(() {
         _allPaiements = response;
         _isLoading = false;
@@ -63,14 +74,16 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
     }
   }
 
-  // _applyFilters CORRIGÉ avec logs
+  // _applyFilters CORRIGÉ avec meilleur debugging et logique fixée
   void _applyFilters() {
-    print('🔍 Application filtre: $_currentFilter');
-    print('📊 Total paiements: ${_allPaiements.length}');
+    print('🔍 === DÉBUT FILTRAGE ===');
+    print('📊 Filtre actuel: $_currentFilter');
+    print('🔎 Recherche: "${_searchController.text}"');
+    print('📊 Total paiements disponibles: ${_allPaiements.length}');
 
     List<dynamic> filtered = List.from(_allPaiements);
 
-    // Filtre par statut
+    // ÉTAPE 1: Filtre par statut SEULEMENT si pas "Tous"
     if (_currentFilter != 'Tous') {
       // CORRECTION : Map les labels UI vers les statuts DB
       String statutDB = _currentFilter;
@@ -80,32 +93,64 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
         statutDB = 'Payé'; // Singulier dans la DB
       }
 
-      filtered =
-          filtered.where((p) {
-            final statut = p['statut']?.toString() ?? '';
-            return statut == statutDB;
-          }).toList();
+      print('🎯 Filtrage par statut: "$statutDB"');
 
-      print('Après filtre statut "$statutDB": ${filtered.length} paiements');
+      final beforeFilter = filtered.length;
+      filtered = filtered.where((p) {
+        final statut = p['statut']?.toString() ?? '';
+        final matches = statut == statutDB;
+
+        if (matches) {
+          final bail = p['baux'] as Map<String, dynamic>?;
+          final commercant = bail?['commercants'] as Map<String, dynamic>?;
+          final nomCommercant = commercant?['nom']?.toString() ?? 'N/A';
+          print('   ✅ Trouvé: $statutDB - Commerçant: $nomCommercant');
+        }
+
+        return matches;
+      }).toList();
+
+      print(
+          '📊 Après filtre statut "$statutDB": ${filtered.length} paiements (était $beforeFilter)');
     }
 
-    // Filtre par recherche
+    // ÉTAPE 2: Filtre par recherche SEULEMENT si recherche non vide
     if (_searchController.text.isNotEmpty) {
       final searchTerm = _searchController.text.toLowerCase();
-      filtered =
-          filtered.where((paiement) {
-            final bail = paiement['baux'] as Map<String, dynamic>?;
-            final commercant = bail?['commercants'] as Map<String, dynamic>?;
-            final nomCommercant =
-                commercant?['nom']?.toString().toLowerCase() ?? '';
+      print('🔎 Filtrage par recherche: "$searchTerm"');
 
-            return nomCommercant.contains(searchTerm);
-          }).toList();
+      final beforeSearch = filtered.length;
+      filtered = filtered.where((paiement) {
+        final bail = paiement['baux'] as Map<String, dynamic>?;
+        final commercant = bail?['commercants'] as Map<String, dynamic>?;
+        final nomCommercant =
+            commercant?['nom']?.toString().toLowerCase() ?? '';
 
-      print('Après recherche: ${filtered.length} paiements');
+        final matches = nomCommercant.contains(searchTerm);
+
+        if (matches) {
+          print(
+              '   🎯 Correspondance recherche: "$nomCommercant" contient "$searchTerm"');
+        }
+
+        return matches;
+      }).toList();
+
+      print(
+          '📊 Après recherche: ${filtered.length} paiements (était $beforeSearch)');
     }
 
+    // ÉTAPE 3: Debug final
     print('✅ Résultat final: ${filtered.length} paiements');
+    if (filtered.isEmpty && _currentFilter != 'Tous') {
+      print('⚠️  AUCUN RÉSULTAT - Vérifiez:');
+      print('   1. Y a-t-il des paiements avec statut "$_currentFilter" ?');
+      if (_searchController.text.isNotEmpty) {
+        print(
+            '   2. Ces paiements ont-ils des commerçants contenant "${_searchController.text}" ?');
+      }
+    }
+    print('🔍 === FIN FILTRAGE ===\n');
 
     setState(() {
       _paiements = filtered;
@@ -121,6 +166,8 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
         _allPaiements.where((p) => p['statut'] == 'En attente').length;
     final countEnRetard =
         _allPaiements.where((p) => p['statut'] == 'En retard').length;
+    final countPartiel =
+        _allPaiements.where((p) => p['statut'] == 'Partiel').length;
 
     return Scaffold(
       appBar: AppBar(title: Text('Paiements')),
@@ -132,12 +179,21 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Rechercher par commerçant, ...',
+                hintText: 'Rechercher par commerçant...',
                 prefixIcon: Icon(Icons.search),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          _applyFilters();
+                        },
+                      )
+                    : null,
                 border: OutlineInputBorder(),
               ),
               onChanged: (value) {
-                print('🔎 Recherche: $value');
+                print('🔎 Recherche changée: "$value"');
                 _applyFilters();
               },
             ),
@@ -155,7 +211,7 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
                   onTap: () {
                     print('👆 Clic sur Tous');
                     setState(() => _currentFilter = 'Tous');
-                    _applyFilters(); // IMPORTANT
+                    _applyFilters();
                   },
                 ),
                 SizedBox(width: 8),
@@ -166,7 +222,7 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
                   onTap: () {
                     print('👆 Clic sur En attente');
                     setState(() => _currentFilter = 'En attente');
-                    _applyFilters(); // IMPORTANT
+                    _applyFilters();
                   },
                 ),
                 SizedBox(width: 8),
@@ -177,7 +233,7 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
                   onTap: () {
                     print('👆 Clic sur Payés');
                     setState(() => _currentFilter = 'Payés');
-                    _applyFilters(); // IMPORTANT
+                    _applyFilters();
                   },
                 ),
                 SizedBox(width: 8),
@@ -188,7 +244,18 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
                   onTap: () {
                     print('👆 Clic sur En retard');
                     setState(() => _currentFilter = 'En retard');
-                    _applyFilters(); // IMPORTANT
+                    _applyFilters();
+                  },
+                ),
+                SizedBox(width: 8),
+                _FilterChip(
+                  label: 'Partiels ($countPartiel)',
+                  isSelected: _currentFilter == 'Partiel',
+                  color: Colors.amber,
+                  onTap: () {
+                    print('👆 Clic sur Partiel');
+                    setState(() => _currentFilter = 'Partiel');
+                    _applyFilters();
                   },
                 ),
               ],
@@ -197,35 +264,84 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
 
           SizedBox(height: 16),
 
+          // Résultats avec info de debugging
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '${_paiements.length} paiement${_paiements.length > 1 ? "s" : ""} trouvé${_paiements.length > 1 ? "s" : ""}',
-                style: TextStyle(color: Colors.grey),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_paiements.length} paiement${_paiements.length > 1 ? "s" : ""} trouvé${_paiements.length > 1 ? "s" : ""}',
+                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                ),
+                if (_currentFilter != 'Tous' ||
+                    _searchController.text.isNotEmpty)
+                  Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Filtre: ${_currentFilter}${_searchController.text.isNotEmpty ? ' • Recherche: "${_searchController.text}"' : ''}',
+                      style: TextStyle(color: Colors.blue, fontSize: 12),
+                    ),
+                  ),
+              ],
             ),
           ),
 
           SizedBox(height: 8),
 
           Expanded(
-            child:
-                _isLoading
-                    ? Center(child: CircularProgressIndicator())
-                    : _paiements.isEmpty
-                    ? Center(child: Text('Aucun paiement trouvé'))
+            child: _isLoading
+                ? Center(child: CircularProgressIndicator())
+                : _paiements.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.search_off,
+                                size: 64, color: Colors.grey),
+                            SizedBox(height: 16),
+                            Text(
+                              'Aucun paiement trouvé',
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            if (_currentFilter != 'Tous' ||
+                                _searchController.text.isNotEmpty) ...[
+                              SizedBox(height: 8),
+                              Text(
+                                'Essayez de modifier vos filtres',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                              SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _currentFilter = 'Tous';
+                                    _searchController.clear();
+                                  });
+                                  _applyFilters();
+                                },
+                                child: Text('Réinitialiser les filtres'),
+                              ),
+                            ],
+                          ],
+                        ),
+                      )
                     : RefreshIndicator(
-                      onRefresh: _loadPaiements,
-                      child: ListView.builder(
-                        itemCount: _paiements.length,
-                        itemBuilder: (context, index) {
-                          final paiement = _paiements[index];
-                          return _buildPaiementCard(paiement);
-                        },
+                        onRefresh: _loadPaiements,
+                        child: ListView.builder(
+                          itemCount: _paiements.length,
+                          itemBuilder: (context, index) {
+                            final paiement = _paiements[index];
+                            return _buildPaiementCard(paiement);
+                          },
+                        ),
                       ),
-                    ),
           ),
         ],
       ),
@@ -329,8 +445,8 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
           final result = await Navigator.push(
             context,
             MaterialPageRoute(
-              builder:
-                  (context) => PaymentDetailsScreen(paiementId: paiement['id']),
+              builder: (context) =>
+                  PaymentDetailsScreen(paiementId: paiement['id']),
             ),
           );
 

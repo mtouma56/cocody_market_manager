@@ -1,7 +1,11 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart' as intl;
 
 class PaiementsService {
   final _supabase = Supabase.instance.client;
+
+  // Getter public pour l'accès depuis le dashboard
+  SupabaseClient get supabase => _supabase;
 
   // Récupère tous les paiements
   Future<List<Map<String, dynamic>>> getPaiements({String? statut}) async {
@@ -469,6 +473,88 @@ class PaiementsService {
       return response;
     } catch (e) {
       print('❌ ERREUR updatePaiement: $e');
+      rethrow;
+    }
+  }
+
+  // Nouvelle méthode pour récupérer les paiements du jour avec statuts spécifiques
+  Future<List<Map<String, dynamic>>> getPaiementsAujourdhui() async {
+    try {
+      final now = DateTime.now();
+      final dateDebut = intl.DateFormat('yyyy-MM-dd')
+          .format(DateTime(now.year, now.month, now.day));
+      final dateFin = intl.DateFormat('yyyy-MM-dd')
+          .format(DateTime(now.year, now.month, now.day + 1));
+
+      final paiements = await _supabase
+          .from('paiements')
+          .select('''
+          *,
+          baux!inner(
+            numero_contrat,
+            commercants(nom, activite),
+            locaux(numero)
+          )
+        ''')
+          .gte('date_paiement', dateDebut)
+          .lt('date_paiement', dateFin)
+          .inFilter('statut', ['Payé', 'Partiel'])
+          .order('date_paiement', ascending: false);
+
+      return List<Map<String, dynamic>>.from(paiements);
+    } catch (e) {
+      print('❌ ERREUR getPaiementsAujourdhui: $e');
+      rethrow;
+    }
+  }
+
+  // Nouvelle méthode pour récupérer les paiements en retard avec montant initial
+  Future<List<Map<String, dynamic>>> getPaiementsEnRetard() async {
+    try {
+      final paiements = await _supabase.from('paiements').select('''
+          *,
+          baux!inner(
+            numero_contrat,
+            montant_loyer,
+            commercants(nom, activite),
+            locaux(numero)
+          )
+        ''').eq('statut', 'En retard').order('date_echeance', ascending: true);
+
+      // Ajouter le montant_initial pour chaque paiement
+      final paiementsAvecMontantInitial = paiements.map((p) {
+        final bail = p['baux'] as Map<String, dynamic>?;
+        final montantLoyer = bail?['montant_loyer'];
+
+        return {
+          ...p,
+          'montant_initial': montantLoyer ?? p['montant'],
+        };
+      }).toList();
+
+      return List<Map<String, dynamic>>.from(paiementsAvecMontantInitial);
+    } catch (e) {
+      print('❌ ERREUR getPaiementsEnRetard: $e');
+      rethrow;
+    }
+  }
+
+  // Nouvelle méthode pour récupérer les paiements en attente
+  Future<List<Map<String, dynamic>>> getPaiementsEnAttente() async {
+    try {
+      final paiements = await _supabase.from('paiements').select('''
+          *,
+          baux!inner(
+            numero_contrat,
+            montant_loyer,
+            commercants(nom, activite),
+            locaux(numero)
+          )
+        ''').eq('statut', 'En attente').order('date_echeance', ascending: true);
+
+      return List<Map<String, dynamic>>.from(paiements);
+    } catch (e) {
+      print('❌ ERREUR getPaiementsEnAttente: $e');
       rethrow;
     }
   }

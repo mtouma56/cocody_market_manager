@@ -14,6 +14,7 @@ import '../presentation/payment_details_screen/payment_details_screen.dart';
 import '../presentation/add_payment_form_screen/add_payment_form_screen.dart';
 import '../presentation/edit_payment_screen/edit_payment_screen.dart';
 import '../presentation/payment_service_integration_screen/payment_service_integration_screen.dart';
+import '../presentation/reports_screen/reports_screen.dart';
 import '../presentation/settings_screen/settings_screen.dart';
 
 class AppRoutes {
@@ -36,6 +37,7 @@ class AppRoutes {
   static const String editPaymentScreen = '/edit-payment-screen';
   static const String paymentServiceIntegrationScreen =
       '/payment-service-integration-screen';
+  static const String reportsScreen = '/reports-screen';
   static const String settingsScreen = '/settings-screen';
 
   static Map<String, WidgetBuilder> routes = {
@@ -75,6 +77,7 @@ class AppRoutes {
     },
     paymentServiceIntegrationScreen: (context) =>
         const PaymentServiceIntegrationScreen(),
+    reportsScreen: (context) => const ReportsScreen(),
     settingsScreen: (context) => const SettingsScreen(),
   };
 }

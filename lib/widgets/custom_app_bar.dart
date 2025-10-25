@@ -8,6 +8,20 @@ enum CustomAppBarVariant {
   minimal,
 }
 
+enum SortOption {
+  propertyNumber,
+  propertyType,
+  floor,
+  status,
+}
+
+enum StatusFilter {
+  all,
+  available,
+  occupied,
+  maintenance,
+}
+
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final CustomAppBarVariant variant;
@@ -20,6 +34,13 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final Color? backgroundColor;
   final Color? foregroundColor;
   final double? elevation;
+
+  // New functional callbacks
+  final Function(List<StatusFilter>)? onFilterChanged;
+  final Function(SortOption, bool)? onSortChanged;
+  final List<StatusFilter>? currentFilters;
+  final SortOption? currentSortOption;
+  final bool? currentSortAscending;
 
   const CustomAppBar({
     super.key,
@@ -34,6 +55,11 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.backgroundColor,
     this.foregroundColor,
     this.elevation,
+    this.onFilterChanged,
+    this.onSortChanged,
+    this.currentFilters,
+    this.currentSortOption,
+    this.currentSortAscending,
   });
 
   @override
@@ -97,7 +123,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
         IconButton(
           icon: const Icon(Icons.search),
           onPressed: onSearchPressed ?? () => _showSearchBottomSheet(context),
-          tooltip: 'Search properties',
+          tooltip: 'Rechercher locaux',
         ),
         ..._buildDefaultActions(context),
       ],
@@ -124,15 +150,31 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: automaticallyImplyLeading,
       actions: [
         IconButton(
-          icon: const Icon(Icons.filter_list),
+          icon: Icon(
+            Icons.filter_list,
+            color: (currentFilters?.isNotEmpty == true)
+                ? colorScheme.primary
+                : colorScheme.onSurface,
+          ),
           onPressed: () => _showFilterBottomSheet(context),
-          tooltip: 'Filter properties',
+          tooltip: 'Filtrer les locaux',
         ),
         IconButton(
-          icon: const Icon(Icons.sort),
+          icon: Icon(
+            Icons.sort,
+            color: (currentSortOption != null)
+                ? colorScheme.primary
+                : colorScheme.onSurface,
+          ),
           onPressed: () => _showSortBottomSheet(context),
-          tooltip: 'Sort properties',
+          tooltip: 'Trier les locaux',
         ),
+        if (onSearchPressed != null)
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: onSearchPressed,
+            tooltip: 'Rechercher',
+          ),
         ..._buildDefaultActions(context),
       ],
     );
@@ -176,7 +218,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
             value: 'settings',
             child: ListTile(
               leading: Icon(Icons.settings),
-              title: Text('Settings'),
+              title: Text('Paramètres'),
               contentPadding: EdgeInsets.zero,
             ),
           ),
@@ -184,7 +226,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
             value: 'help',
             child: ListTile(
               leading: Icon(Icons.help_outline),
-              title: Text('Help'),
+              title: Text('Aide'),
               contentPadding: EdgeInsets.zero,
             ),
           ),
@@ -220,7 +262,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
               child: TextField(
                 autofocus: true,
                 decoration: InputDecoration(
-                  hintText: searchHint ?? 'Search properties, tenants...',
+                  hintText: searchHint ?? 'Rechercher locaux, locataires...',
                   prefixIcon: const Icon(Icons.search),
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.close),
@@ -234,13 +276,13 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
                   Text(
-                    'Recent Searches',
+                    'Recherches récentes',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
-                  _buildSearchSuggestion(context, 'Available properties'),
-                  _buildSearchSuggestion(context, 'Overdue payments'),
-                  _buildSearchSuggestion(context, 'Lease renewals'),
+                  _buildSearchSuggestion(context, 'Locaux disponibles'),
+                  _buildSearchSuggestion(context, 'Paiements en retard'),
+                  _buildSearchSuggestion(context, 'Renouvellements de bail'),
                 ],
               ),
             ),
@@ -251,94 +293,232 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   void _showFilterBottomSheet(BuildContext context) {
+    List<StatusFilter> selectedFilters =
+        List.from(currentFilters ?? [StatusFilter.all]);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: 300,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.outline,
-                borderRadius: BorderRadius.circular(2),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => Container(
+          height: 350,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.outline,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                'Filter Properties',
-                style: Theme.of(context).textTheme.titleLarge,
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Filtrer par statut',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          selectedFilters = [StatusFilter.all];
+                        });
+                      },
+                      child: const Text('Réinitialiser'),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  _buildFilterOption(context, 'Available', true),
-                  _buildFilterOption(context, 'Occupied', false),
-                  _buildFilterOption(context, 'Under Maintenance', false),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Apply Filters'),
-                  ),
-                ],
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    _buildFilterOption(
+                      context,
+                      'Tous les locaux',
+                      StatusFilter.all,
+                      selectedFilters,
+                      setState,
+                    ),
+                    _buildFilterOption(
+                      context,
+                      'Disponibles',
+                      StatusFilter.available,
+                      selectedFilters,
+                      setState,
+                    ),
+                    _buildFilterOption(
+                      context,
+                      'Occupés',
+                      StatusFilter.occupied,
+                      selectedFilters,
+                      setState,
+                    ),
+                    _buildFilterOption(
+                      context,
+                      'En maintenance',
+                      StatusFilter.maintenance,
+                      selectedFilters,
+                      setState,
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Annuler'),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              onFilterChanged?.call(selectedFilters);
+                            },
+                            child: const Text('Appliquer'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   void _showSortBottomSheet(BuildContext context) {
+    SortOption selectedSort = currentSortOption ?? SortOption.propertyNumber;
+    bool selectedAscending = currentSortAscending ?? true;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: 250,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.outline,
-                borderRadius: BorderRadius.circular(2),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => Container(
+          height: 400,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.outline,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                'Sort Properties',
-                style: Theme.of(context).textTheme.titleLarge,
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Trier par',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          selectedSort = SortOption.propertyNumber;
+                          selectedAscending = true;
+                        });
+                      },
+                      child: const Text('Par défaut'),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  _buildSortOption(context, 'Property Name', true),
-                  _buildSortOption(context, 'Rent Amount', false),
-                  _buildSortOption(context, 'Lease End Date', false),
-                  _buildSortOption(context, 'Status', false),
-                ],
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    _buildSortOption(
+                      context,
+                      'Numéro de local',
+                      SortOption.propertyNumber,
+                      selectedSort,
+                      (option) => setState(() => selectedSort = option),
+                    ),
+                    _buildSortOption(
+                      context,
+                      'Type de local',
+                      SortOption.propertyType,
+                      selectedSort,
+                      (option) => setState(() => selectedSort = option),
+                    ),
+                    _buildSortOption(
+                      context,
+                      'Étage',
+                      SortOption.floor,
+                      selectedSort,
+                      (option) => setState(() => selectedSort = option),
+                    ),
+                    _buildSortOption(
+                      context,
+                      'Statut',
+                      SortOption.status,
+                      selectedSort,
+                      (option) => setState(() => selectedSort = option),
+                    ),
+                    const Divider(height: 32),
+                    SwitchListTile(
+                      title: const Text('Ordre croissant'),
+                      subtitle: Text(
+                        selectedAscending ? 'A → Z, 1 → 9' : 'Z → A, 9 → 1',
+                      ),
+                      value: selectedAscending,
+                      onChanged: (value) {
+                        setState(() {
+                          selectedAscending = value;
+                        });
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Annuler'),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              onSortChanged?.call(
+                                  selectedSort, selectedAscending);
+                            },
+                            child: const Text('Appliquer'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -354,30 +534,64 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   Widget _buildFilterOption(
-      BuildContext context, String option, bool isSelected) {
+    BuildContext context,
+    String title,
+    StatusFilter filter,
+    List<StatusFilter> selectedFilters,
+    StateSetter setState,
+  ) {
+    final isSelected = selectedFilters.contains(filter);
+
     return CheckboxListTile(
-      title: Text(option),
+      title: Text(title),
       value: isSelected,
-      onChanged: (value) {},
+      onChanged: (value) {
+        setState(() {
+          if (filter == StatusFilter.all) {
+            if (value == true) {
+              selectedFilters.clear();
+              selectedFilters.add(StatusFilter.all);
+            }
+          } else {
+            if (value == true) {
+              selectedFilters.remove(StatusFilter.all);
+              selectedFilters.add(filter);
+            } else {
+              selectedFilters.remove(filter);
+              if (selectedFilters.isEmpty) {
+                selectedFilters.add(StatusFilter.all);
+              }
+            }
+          }
+        });
+      },
       contentPadding: EdgeInsets.zero,
     );
   }
 
   Widget _buildSortOption(
-      BuildContext context, String option, bool isSelected) {
-    return RadioListTile<String>(
-      title: Text(option),
+    BuildContext context,
+    String title,
+    SortOption option,
+    SortOption selectedSort,
+    Function(SortOption) onChanged,
+  ) {
+    return RadioListTile<SortOption>(
+      title: Text(title),
       value: option,
-      groupValue: isSelected ? option : null,
-      onChanged: (value) => Navigator.pop(context),
+      groupValue: selectedSort,
+      onChanged: (value) {
+        if (value != null) {
+          onChanged(value);
+        }
+      },
       contentPadding: EdgeInsets.zero,
     );
   }
 
   void _navigateToNotifications(BuildContext context) {
-    // Navigate to notifications screen
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Notifications feature coming soon')),
+      const SnackBar(content: Text('Notifications à venir')),
     );
   }
 
@@ -388,7 +602,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
         break;
       case 'help':
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Help feature coming soon')),
+          const SnackBar(content: Text('Aide à venir')),
         );
         break;
     }

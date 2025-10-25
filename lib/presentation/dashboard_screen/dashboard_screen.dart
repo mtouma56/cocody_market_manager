@@ -1,12 +1,15 @@
-import 'package:flutter/material.dart';
-import 'package:sizer/sizer.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:percent_indicator/percent_indicator.dart';
+import 'package:sizer/sizer.dart';
 
+import '../../models/dashboard_stats.dart';
+import '../../services/dashboard_service.dart';
+import '../../services/paiements_service.dart';
+import '../../services/rapport_service.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/custom_bottom_bar.dart';
-import '../../services/dashboard_service.dart';
-import '../../models/dashboard_stats.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -18,6 +21,8 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final DashboardService _dashboardService = DashboardService();
+  final PaiementsService _paiementsService = PaiementsService();
+  final RapportService _rapportService = RapportService();
 
   bool _isLoading = true;
   String? _errorMessage;
@@ -256,117 +261,155 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Widget 2 - ENCAISSEMENTS JOUR (utilise les données réelles)
+  // Widget 2 - ENCAISSEMENTS JOUR (utilise les données réelles et clickable)
   Widget _buildDailyIncomeWidget() {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: EdgeInsets.all(4.w),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            const Icon(Icons.attach_money, size: 36, color: Color(0xFF2196F3)),
-            Flexible(
-              child: Text(
-                '${(_dashboardStats!.encaissements / 1000000).toStringAsFixed(1)}M FCFA',
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      child: InkWell(
+        onTap: () => _genererRapportCollecteAujourdhui(),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: EdgeInsets.all(4.w),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.attach_money,
+                      size: 24, color: Color(0xFF2196F3)),
+                  SizedBox(width: 2.w),
+                  Expanded(
+                    child: Text(
+                      'COLLECTE AUJOURD\'HUI',
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[700]),
+                    ),
+                  ),
+                  Icon(Icons.picture_as_pdf, size: 16, color: Colors.red[600]),
+                ],
+              ),
+              Flexible(
+                child: Text(
+                  '${(_dashboardStats!.encaissements / 1000000).toStringAsFixed(1)}M FCFA',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 2.w, vertical: 1.w),
+                decoration: BoxDecoration(
+                  color: Colors.green[100],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '+12% vs hier',
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.green[700],
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+              Text(
+                'Tapez pour générer PDF',
+                style: TextStyle(fontSize: 9, color: Colors.grey[500]),
                 textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 2.w, vertical: 1.w),
-              decoration: BoxDecoration(
-                color: Colors.green[100],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '+12% vs hier',
-                style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.green[700],
-                    fontWeight: FontWeight.w600),
-              ),
-            ),
-            Text(
-              'Collecté aujourd\'hui',
-              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // Widget 3 - IMPAYÉS (utilise les données réelles)
+  // Widget 3 - IMPAYÉS (utilise les données réelles et clickable)
   Widget _buildOverdueWidget() {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFFFEBEE), Color(0xFFFFCDD2)],
-          ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        padding: EdgeInsets.all(4.w),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Icon(Icons.warning_amber,
-                    size: 30, color: Color(0xFFF44336)),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 2.w, vertical: 1.w),
-                  decoration: BoxDecoration(
-                    color: Colors.red[600],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'URGENT',
-                    style: TextStyle(
-                        fontSize: 9,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
+      child: InkWell(
+        onTap: () => _genererRapportMontantEnRetard(),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFFFFEBEE), Color(0xFFFFCDD2)],
             ),
-            Flexible(
-              child: Text(
-                '${(_dashboardStats!.impayes / 1000000).toStringAsFixed(1)}M FCFA',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.red[800]),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: EdgeInsets.all(4.w),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Icon(Icons.warning_amber,
+                      size: 24, color: Color(0xFFF44336)),
+                  Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 2.w, vertical: 1.w),
+                        decoration: BoxDecoration(
+                          color: Colors.red[600],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          'URGENT',
+                          style: TextStyle(
+                              fontSize: 8,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      SizedBox(width: 1.w),
+                      Icon(Icons.picture_as_pdf,
+                          size: 16, color: Colors.red[600]),
+                    ],
+                  ),
+                ],
+              ),
+              Flexible(
+                child: Text(
+                  '${(_dashboardStats!.impayes / 1000000).toStringAsFixed(1)}M FCFA',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red[800]),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                'Montants en retard',
+                style:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-            ),
-            Text(
-              'Montants en retard',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+              Text(
+                'Tapez pour générer PDF',
+                style: TextStyle(fontSize: 9, color: Colors.red[400]),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // Widget 4 - ACTIVITÉ COMMERÇANTS (utilise les données réelles)
+  // Widget 4 - ACTIVITÉ COMMERÇANTS (utilise les données réelles et clickable)
   Widget _buildMerchantActivityWidget() {
     final tauxActivite = _dashboardStats!.totalLocaux > 0
         ? (_dashboardStats!.commercants / _dashboardStats!.totalLocaux) * 100
@@ -375,49 +418,267 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: EdgeInsets.all(4.w),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.people, color: Color(0xFF2196F3), size: 20),
-                SizedBox(width: 2.w),
-                Expanded(
-                  child: Text(
-                    'COMMERÇANTS',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[700]),
+      child: InkWell(
+        onTap: () => _genererRapportPaiementsEnAttente(),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: EdgeInsets.all(4.w),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.people, color: Color(0xFF2196F3), size: 20),
+                  SizedBox(width: 2.w),
+                  Expanded(
+                    child: Text(
+                      'PAIEMENTS EN ATTENTE',
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[700]),
+                    ),
                   ),
+                  Icon(Icons.picture_as_pdf,
+                      size: 16, color: Colors.orange[600]),
+                ],
+              ),
+              Flexible(
+                child: Text(
+                  '${_dashboardStats!.commercants}',
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
                 ),
-              ],
-            ),
-            Flexible(
-              child: Text(
-                '${_dashboardStats!.commercants}',
-                style:
-                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              LinearPercentIndicator(
+                lineHeight: 6.0,
+                percent: tauxActivite / 100,
+                backgroundColor: Colors.grey[200]!,
+                progressColor: const Color(0xFF4CAF50),
+                barRadius: const Radius.circular(4),
+                animation: true,
+              ),
+              Text(
+                'Tapez pour générer PDF',
+                style: TextStyle(fontSize: 9, color: Colors.grey[500]),
                 textAlign: TextAlign.center,
               ),
-            ),
-            LinearPercentIndicator(
-              lineHeight: 6.0,
-              percent: tauxActivite / 100,
-              backgroundColor: Colors.grey[200]!,
-              progressColor: const Color(0xFF4CAF50),
-              barRadius: const Radius.circular(4),
-              animation: true,
-            ),
-            Text(
-              'Commerçants actifs',
-              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-              textAlign: TextAlign.center,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Fonctions de génération de PDF pour chaque widget
+  Future<void> _genererRapportCollecteAujourdhui() async {
+    try {
+      _showLoadingDialog(
+          'Génération du rapport des paiements d\'aujourd\'hui...');
+
+      final now = DateTime.now();
+      final dateDebut = DateTime(now.year, now.month, now.day);
+      final dateFin = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+      print(
+          '🔍 Recherche des paiements pour le ${DateFormat('yyyy-MM-dd').format(dateDebut)}');
+
+      // Récupérer les paiements qui ont été payés aujourd'hui OU qui sont dus aujourd'hui
+      final paiements = await _paiementsService.supabase
+          .from('paiements')
+          .select('''
+          *,
+          baux!inner(
+            numero_contrat,
+            commercants(nom, activite),
+            locaux(numero)
+          )
+        ''')
+          .or('date_paiement.eq.${DateFormat('yyyy-MM-dd').format(dateDebut)},date_echeance.eq.${DateFormat('yyyy-MM-dd').format(dateDebut)}')
+          .inFilter('statut', ['Payé', 'Partiel'])
+          .order('date_paiement', ascending: false);
+
+      print('✅ Trouvé ${paiements.length} paiements pour aujourd\'hui');
+      print(
+          '📊 Détails des paiements: ${paiements.map((p) => 'ID: ${p['id']}, Statut: ${p['statut']}, Date paiement: ${p['date_paiement']}, Date échéance: ${p['date_echeance']}, Montant: ${p['montant']}').join(' | ')}');
+
+      Navigator.of(context).pop(); // Fermer le dialog de loading
+
+      if (paiements.isEmpty) {
+        // Vérifier s'il y a des paiements en base avec une requête plus large pour debug
+        final allPayments = await _paiementsService.supabase
+            .from('paiements')
+            .select('id, statut, date_paiement, date_echeance, montant')
+            .order('date_paiement', ascending: false)
+            .limit(10);
+
+        print(
+            '🔍 Debug - Derniers paiements en base: ${allPayments.map((p) => 'Statut: ${p['statut']}, Date paiement: ${p['date_paiement']}, Date échéance: ${p['date_echeance']}').join(' | ')}');
+
+        _showInfoDialog(
+            'Aucun paiement effectué aujourd\'hui (${DateFormat('dd/MM/yyyy').format(dateDebut)}).\n\nVérifiez s\'il y a des paiements avec les statuts "Payé" ou "Partiel" pour cette date.');
+        return;
+      }
+
+      await _rapportService.genererRapportPDF(
+        paiements: paiements,
+        dateDebut: dateDebut,
+        dateFin: dateFin,
+        periode: 'Aujourd\'hui (${DateFormat('dd/MM/yyyy').format(dateDebut)})',
+        typeRapport: 'Paiements effectués',
+      );
+
+      _showSuccessSnackBar(
+          'Rapport des paiements d\'aujourd\'hui généré avec succès ! (${paiements.length} paiements)');
+    } catch (e) {
+      print('❌ Erreur lors de la génération du rapport: $e');
+      Navigator.of(context)
+          .pop(); // Fermer le dialog de loading en cas d'erreur
+      _showErrorSnackBar(
+          'Erreur lors de la génération du rapport: ${e.toString()}');
+    }
+  }
+
+  Future<void> _genererRapportMontantEnRetard() async {
+    try {
+      _showLoadingDialog('Génération du rapport des paiements en retard...');
+
+      // Récupérer TOUS les paiements en retard sans restriction de période
+      final paiements =
+          await _paiementsService.supabase.from('paiements').select('''
+          *,
+          baux!inner(
+            numero_contrat,
+            montant_loyer,
+            commercants(nom, activite),
+            locaux(numero)
+          )
+        ''').eq('statut', 'En retard').order('date_echeance', ascending: true);
+
+      Navigator.of(context).pop(); // Fermer le dialog de loading
+
+      if (paiements.isEmpty) {
+        _showInfoDialog('Aucun paiement en retard trouvé.');
+        return;
+      }
+
+      // Pour les paiements en retard, pas de restriction de date
+      await _rapportService.genererRapportPDF(
+        paiements: paiements,
+        dateDebut: DateTime.now(), // Date factice pour l'affichage
+        dateFin: DateTime.now(), // Date factice pour l'affichage
+        periode: 'Toutes périodes',
+        typeRapport: 'Paiements en retard',
+      );
+
+      _showSuccessSnackBar(
+          'Rapport des paiements en retard généré avec succès !');
+    } catch (e) {
+      Navigator.of(context)
+          .pop(); // Fermer le dialog de loading en cas d'erreur
+      _showErrorSnackBar(
+          'Erreur lors de la génération du rapport: ${e.toString()}');
+    }
+  }
+
+  Future<void> _genererRapportPaiementsEnAttente() async {
+    try {
+      _showLoadingDialog('Génération du rapport des paiements en attente...');
+
+      // Récupérer TOUS les paiements en attente sans restriction de période
+      final paiements =
+          await _paiementsService.supabase.from('paiements').select('''
+          *,
+          baux!inner(
+            numero_contrat,
+            montant_loyer,
+            commercants(nom, activite),
+            locaux(numero)
+          )
+        ''').eq('statut', 'En attente').order('date_echeance', ascending: true);
+
+      Navigator.of(context).pop(); // Fermer le dialog de loading
+
+      if (paiements.isEmpty) {
+        _showInfoDialog('Aucun paiement en attente trouvé.');
+        return;
+      }
+
+      // Pour les paiements en attente, pas de restriction de date
+      await _rapportService.genererRapportPDF(
+        paiements: paiements,
+        dateDebut: DateTime.now(), // Date factice pour l'affichage
+        dateFin: DateTime.now(), // Date factice pour l'affichage
+        periode: 'Toutes périodes',
+        typeRapport: 'Paiements en attente',
+      );
+
+      _showSuccessSnackBar(
+          'Rapport des paiements en attente généré avec succès !');
+    } catch (e) {
+      Navigator.of(context)
+          .pop(); // Fermer le dialog de loading en cas d'erreur
+      _showErrorSnackBar(
+          'Erreur lors de la génération du rapport: ${e.toString()}');
+    }
+  }
+
+  // Dialogs et utilitaires
+  void _showLoadingDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Expanded(child: Text(message)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showInfoDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Information'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('OK'),
             ),
           ],
-        ),
+        );
+      },
+    );
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 4),
       ),
     );
   }
