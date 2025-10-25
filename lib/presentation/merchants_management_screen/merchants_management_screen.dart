@@ -7,6 +7,8 @@ import '../../core/app_export.dart';
 import '../../services/merchants_service.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/custom_bottom_bar.dart';
+import '../lease_management_screen/lease_management_screen.dart';
+import '../payments_management_screen/payments_management_screen.dart';
 import './widgets/add_merchant_bottom_sheet_widget.dart';
 import './widgets/merchant_card_widget.dart';
 import './widgets/merchant_filter_bottom_sheet_widget.dart';
@@ -55,21 +57,29 @@ class _MerchantsManagementScreenState extends State<MerchantsManagementScreen> {
 
   void _viewMerchantLease(Map<String, dynamic> merchant) {
     HapticFeedback.lightImpact();
-    // Navigate to lease management with filter for this merchant
-    Navigator.pushNamed(
+    // Navigate vers Baux filtrés par ce commerçant
+    Navigator.push(
       context,
-      '/lease-management-screen',
-      arguments: {'merchantId': merchant['id']},
+      MaterialPageRoute(
+        builder: (context) => LeaseManagementScreen(
+          initialCommercantId: merchant['id'],
+          initialCommercantName: merchant['name'],
+        ),
+      ),
     );
   }
 
   void _viewMerchantPaymentHistory(Map<String, dynamic> merchant) {
     HapticFeedback.lightImpact();
-    // Navigate to payments management with filter for this merchant
-    Navigator.pushNamed(
+    // Navigate vers Paiements filtrés par ce commerçant
+    Navigator.push(
       context,
-      '/payments-management-screen',
-      arguments: {'merchantId': merchant['id']},
+      MaterialPageRoute(
+        builder: (context) => PaymentsManagementScreen(
+          initialCommercantId: merchant['id'],
+          initialCommercantName: merchant['name'],
+        ),
+      ),
     );
   }
 
@@ -170,10 +180,7 @@ class _MerchantsManagementScreenState extends State<MerchantsManagementScreen> {
       SnackBar(
         content: Text(message),
         duration: const Duration(seconds: 3),
-        action: SnackBarAction(
-          label: 'OK',
-          onPressed: () {},
-        ),
+        action: SnackBarAction(label: 'OK', onPressed: () {}),
       ),
     );
   }
@@ -225,9 +232,9 @@ class _MerchantsManagementScreenState extends State<MerchantsManagementScreen> {
             (merchant['name'] as String? ?? '').toLowerCase().contains(
                   _searchQuery.toLowerCase(),
                 ) ||
-            (merchant['businessType'] as String? ?? '').toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ) ||
+            (merchant['businessType'] as String? ?? '')
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase()) ||
             (merchant['phone'] as String? ?? '').toLowerCase().contains(
                   _searchQuery.toLowerCase(),
                 );
@@ -704,7 +711,9 @@ class _MerchantsManagementScreenState extends State<MerchantsManagementScreen> {
                                       onViewLease: () =>
                                           _viewMerchantLease(merchant),
                                       onPaymentHistory: () =>
-                                          _viewMerchantPaymentHistory(merchant),
+                                          _viewMerchantPaymentHistory(
+                                        merchant,
+                                      ),
                                       onEdit: () => _editMerchant(merchant),
                                       onRemove: () => _removeMerchant(merchant),
                                     ),

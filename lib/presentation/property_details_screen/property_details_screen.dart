@@ -3,7 +3,6 @@ import 'package:sizer/sizer.dart';
 
 import '../../core/app_export.dart';
 import '../../services/properties_service.dart';
-import '../../theme/app_theme.dart';
 import '../../widgets/custom_app_bar.dart';
 import './widgets/property_info_section_widget.dart';
 import './widgets/property_stats_card_widget.dart';

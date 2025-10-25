@@ -351,4 +351,125 @@ class PaiementsService {
       rethrow;
     }
   }
+
+  // Récupère détails complets d'un paiement
+  Future<Map<String, dynamic>> getPaiementDetails(String paiementId) async {
+    try {
+      // Validation de l'ID avant la requête
+      if (paiementId.isEmpty) {
+        throw Exception('ID de paiement vide');
+      }
+
+      // Vérification format UUID
+      final uuidRegex = RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+          caseSensitive: false);
+      if (!uuidRegex.hasMatch(paiementId)) {
+        throw Exception('Format d\'ID de paiement invalide: $paiementId');
+      }
+
+      print('🔍 Récupération paiement ID: $paiementId');
+
+      final paiement = await _supabase.from('paiements').select('''
+          *,
+          baux!inner(
+            *,
+            locaux!inner(*, types_locaux(*), etages(*)),
+            commercants(*)
+          )
+        ''').eq('id', paiementId).single();
+
+      print('✅ Paiement récupéré avec succès');
+      return paiement;
+    } catch (e) {
+      print('❌ ERREUR getPaiementDetails: $e');
+
+      if (e
+          .toString()
+          .contains('JSON object requested, multiple (or no) rows returned')) {
+        throw Exception('Paiement non trouvé avec l\'ID: $paiementId');
+      } else if (e.toString().contains('invalid input syntax for type uuid')) {
+        throw Exception('ID de paiement invalide (format UUID requis)');
+      } else {
+        throw Exception(
+            'Erreur lors du chargement du paiement: ${e.toString()}');
+      }
+    }
+  }
+
+  // Met à jour un paiement
+  Future<Map<String, dynamic>> updatePaiement({
+    required String paiementId,
+    required double montant,
+    required String modePaiement,
+    required String datePaiement,
+    String? notes,
+  }) async {
+    try {
+      // Récupère les infos du paiement pour calculer le nouveau statut
+      final paiement = await _supabase
+          .from('paiements')
+          .select('bail_id, mois_concerne')
+          .eq('id', paiementId)
+          .single();
+
+      final bailId = paiement['bail_id'];
+      final moisConcerne = paiement['mois_concerne'];
+
+      // Récupère le montant du loyer pour ce bail
+      final bail = await _supabase
+          .from('baux')
+          .select('montant_loyer')
+          .eq('id', bailId)
+          .single();
+
+      final montantLoyer = (bail['montant_loyer'] as num).toDouble();
+
+      // Calcule le nouveau statut
+      String nouveauStatut;
+      if (montant >= montantLoyer) {
+        nouveauStatut = 'Payé';
+      } else if (montant > 0) {
+        nouveauStatut = 'Partiel';
+      } else {
+        nouveauStatut = 'En attente';
+      }
+
+      // Vérifie si en retard
+      final moisDate = DateTime.parse('$moisConcerne-01');
+      final dateEcheance = DateTime(moisDate.year, moisDate.month, 10);
+      final now = DateTime.now();
+
+      if (nouveauStatut != 'Payé' && now.isAfter(dateEcheance)) {
+        nouveauStatut = 'En retard';
+      }
+
+      // Met à jour le paiement
+      final response = await _supabase
+          .from('paiements')
+          .update({
+            'montant': montant,
+            'mode_paiement': modePaiement,
+            'date_paiement': datePaiement,
+            'statut': nouveauStatut,
+            'notes': notes,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', paiementId)
+          .select('''
+            *,
+            baux!inner(
+              *,
+              locaux!inner(*, types_locaux(*), etages(*)),
+              commercants(*)
+            )
+          ''')
+          .single();
+
+      return response;
+    } catch (e) {
+      print('❌ ERREUR updatePaiement: $e');
+      rethrow;
+    }
+  }
 }

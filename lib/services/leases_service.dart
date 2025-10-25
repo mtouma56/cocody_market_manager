@@ -7,6 +7,14 @@ class LeasesService {
 
   final _supabase = Supabase.instance.client;
 
+  /// Valide qu'une chaîne est un UUID valide
+  bool _isValidUUID(String? uuid) {
+    if (uuid == null || uuid.isEmpty) return false;
+    final uuidRegExp = RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+    return uuidRegExp.hasMatch(uuid);
+  }
+
   /// Récupère tous les baux avec toutes les informations nécessaires
   Future<List<Map<String, dynamic>>> getAllLeases() async {
     try {
@@ -19,7 +27,9 @@ class LeasesService {
         montant_loyer,
         actif,
         created_at,
+        commercant_id,
         commercants!inner(
+          id,
           nom,
           activite,
           contact,
@@ -49,6 +59,7 @@ class LeasesService {
         leases.add({
           'id': bail['id'],
           'contractNumber': bail['numero_contrat'],
+          'merchantId': bail['commercant_id'], // ✅ AJOUT: ID du commerçant
           'tenantName': bail['commercants']['nom'],
           'tenantBusiness': bail['commercants']['activite'],
           'tenantPhone': bail['commercants']['contact'],
@@ -81,10 +92,22 @@ class LeasesService {
     }
   }
 
-  /// Récupère les baux par statut
-  Future<List<Map<String, dynamic>>> getLeasesByStatus(String status) async {
+  /// Récupère les baux par commerçant (avec validation UUID)
+  Future<List<Map<String, dynamic>>> getLeasesByMerchant(
+      String? merchantId) async {
     try {
-      String supabaseStatus = _getSupabaseStatus(status);
+      // ✅ VALIDATION: Vérifie si l'UUID du commerçant est valide
+      if (!_isValidUUID(merchantId)) {
+        print(
+            '⚠️ UUID commerçant invalide: $merchantId - Retour de tous les baux');
+        return await getAllLeases();
+      }
+
+      // ✅ FIX: Vérifier si le merchantId est null ou vide APRÈS la validation UUID
+      if (merchantId == null || merchantId.isEmpty) {
+        print('⚠️ MerchantId null ou vide - Retour de tous les baux');
+        return await getAllLeases();
+      }
 
       final response = await _supabase
           .from('baux')
@@ -97,7 +120,9 @@ class LeasesService {
         montant_loyer,
         actif,
         created_at,
+        commercant_id,
         commercants!inner(
+          id,
           nom,
           activite,
           contact,
@@ -111,7 +136,8 @@ class LeasesService {
         )
       ''')
           .eq('actif', true)
-          .eq('statut', supabaseStatus)
+          .eq('commercant_id',
+              merchantId) // ✅ Maintenant sûr d'utiliser un UUID valide
           .order('date_debut', ascending: false);
 
       List<Map<String, dynamic>> leases = [];
@@ -127,6 +153,7 @@ class LeasesService {
         leases.add({
           'id': bail['id'],
           'contractNumber': bail['numero_contrat'],
+          'merchantId': bail['commercant_id'], // ✅ AJOUT: ID du commerçant
           'tenantName': bail['commercants']['nom'],
           'tenantBusiness': bail['commercants']['activite'],
           'tenantPhone': bail['commercants']['contact'],
@@ -151,23 +178,34 @@ class LeasesService {
         });
       }
 
+      print(
+          '✅ Récupération de ${leases.length} baux pour le commerçant $merchantId');
       return leases;
     } catch (error) {
-      print('❌ ERREUR getLeasesByStatus: $error');
-      throw Exception('Erreur lors du filtrage par statut: $error');
+      print('❌ ERREUR getLeasesByMerchant: $error');
+      throw Exception('Erreur lors du filtrage par commerçant: $error');
     }
   }
 
-  /// Met à jour le statut d'un bail
+  /// Met à jour le statut d'un bail (UNIQUEMENT pour résiliation manuelle)
   Future<void> updateLeaseStatus(String leaseId, String newStatus) async {
     try {
       String supabaseStatus = _getSupabaseStatus(newStatus);
 
-      await _supabase
-          .from('baux')
-          .update({'statut': supabaseStatus}).eq('id', leaseId);
+      // ✅ SEULEMENT pour résiliation manuelle - Laisse le trigger gérer les autres statuts
+      if (supabaseStatus == 'Résilié') {
+        await _supabase
+            .from('baux')
+            .update({'statut': supabaseStatus}).eq('id', leaseId);
 
-      print('✅ Statut du bail $leaseId mis à jour vers $supabaseStatus');
+        print('✅ Bail $leaseId résilié manuellement');
+      } else {
+        // ✅ Pour les autres statuts, laisser le trigger automatique faire le calcul
+        print(
+            '⚠️ Statut automatique - Les statuts Actif/Expiré/Expire bientôt sont gérés automatiquement par la base de données');
+        throw Exception(
+            'Les statuts automatiques ne peuvent pas être modifiés manuellement. Utilisez updateBail() pour modifier les dates.');
+      }
     } catch (error) {
       print('❌ ERREUR updateLeaseStatus: $error');
       throw Exception('Erreur lors de la mise à jour du statut: $error');
@@ -198,7 +236,8 @@ class LeasesService {
   ) {
     DateTime now = DateTime.now();
 
-    if (statut == 'Expiré') return 'high';
+    // ✅ FIX: Support du nouveau statut Résilié
+    if (statut == 'Expiré' || statut == 'Résilié') return 'high';
 
     // Vérification de l'expiration dans les 30 jours
     if (endDate.difference(now).inDays <= 30) return 'high';
@@ -223,6 +262,8 @@ class LeasesService {
         return 'Expire bientôt';
       case 'expired':
         return 'Expiré';
+      case 'terminated': // ✅ SUPPORT: Résiliation manuelle
+        return 'Résilié';
       default:
         return 'Actif';
     }
@@ -238,6 +279,8 @@ class LeasesService {
         return 'expiring';
       case 'Expiré':
         return 'expired';
+      case 'Résilié': // ✅ SUPPORT: Résiliation manuelle
+        return 'terminated';
       default:
         return 'active';
     }
@@ -366,7 +409,6 @@ class LeasesService {
     required double monthlyRent,
     double? montantCaution,
     double? montantPasDePorte,
-    String status = 'Actif',
   }) async {
     try {
       print('🚀 Création bail: $contractNumber pour local $propertyId');
@@ -382,7 +424,7 @@ class LeasesService {
         throw Exception('Ce local n\'est pas disponible');
       }
 
-      // 2. Prépare les données d'insertion
+      // 2. Prépare les données d'insertion SANS définir le statut
       final insertData = {
         'numero_contrat': contractNumber,
         'local_id': propertyId,
@@ -390,7 +432,6 @@ class LeasesService {
         'date_debut': startDate.toIso8601String().split('T')[0],
         'date_fin': endDate.toIso8601String().split('T')[0],
         'montant_loyer': monthlyRent,
-        'statut': status,
         'actif': true,
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
@@ -404,7 +445,7 @@ class LeasesService {
         insertData['montant_pas_de_porte'] = montantPasDePorte;
       }
 
-      // 3. Crée le bail dans une transaction
+      // 3. Crée le bail - Le trigger calculera automatiquement le statut
       final leaseResponse =
           await _supabase.from('baux').insert(insertData).select('''
             *,
@@ -443,6 +484,182 @@ class LeasesService {
     } catch (error, stackTrace) {
       print('❌ ERREUR createLease: $error');
       print('Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Récupère les détails complets d'un bail
+  Future<Map<String, dynamic>> getBailDetails(String bailId) async {
+    try {
+      // ✅ VALIDATION: Vérifie si l'UUID du bail est valide
+      if (!_isValidUUID(bailId)) {
+        throw Exception('ID de bail invalide: $bailId');
+      }
+
+      // Infos bail complet
+      final bail = await _supabase.from('baux').select('''
+        *,
+        locaux!inner(*, types_locaux(*), etages(*)),
+        commercants(*)
+      ''').eq('id', bailId).single();
+
+      // Ses paiements
+      final paiements = await _supabase
+          .from('paiements')
+          .select()
+          .eq('bail_id', bailId)
+          .order('date_paiement', ascending: false);
+
+      // Calcule statistiques avec prise en compte des modifications de loyer
+      final montantLoyerActuel =
+          (bail['montant_loyer'] as num?)?.toDouble() ?? 0;
+      final dateDebut = DateTime.parse(bail['date_debut']);
+      final dateModification = DateTime.parse(bail['updated_at']);
+      final now = DateTime.now();
+
+      // Calcule le montant attendu en tenant compte des modifications
+      double montantAttendu = 0;
+      final totalPaye =
+          paiements.where((p) => p['statut'] == 'Payé').fold<double>(
+                0,
+                (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
+              );
+
+      // Logique améliorée pour le calcul du montant attendu
+      // Si les paiements existants couvrent déjà une période, on les considère comme valides
+      final paiementsPayes =
+          paiements.where((p) => p['statut'] == 'Payé').toList();
+
+      if (paiementsPayes.isNotEmpty) {
+        // Utilise le nombre de paiements effectués multiplié par le loyer actuel
+        // Cela évite les problèmes de recalcul quand le loyer change
+        final nombrePaiementsEffectues = paiementsPayes.length;
+        montantAttendu = montantLoyerActuel * nombrePaiementsEffectues;
+      } else {
+        // Calcul standard basé sur les mois écoulés
+        int moisEcoules =
+            (now.year - dateDebut.year) * 12 + now.month - dateDebut.month;
+        if (moisEcoules < 0) moisEcoules = 0;
+        montantAttendu = montantLoyerActuel * moisEcoules;
+      }
+
+      // Si le total payé dépasse le montant attendu, ajuste le montant attendu
+      if (totalPaye > montantAttendu) {
+        montantAttendu = totalPaye;
+      }
+
+      final enRetard =
+          paiements.where((p) => p['statut'] == 'En retard').fold<double>(
+                0,
+                (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
+              );
+
+      // Calcul du taux de paiement avec logique améliorée
+      double tauxPaiement = 0.0;
+      if (montantAttendu > 0) {
+        tauxPaiement = (totalPaye / montantAttendu * 100).clamp(0, 100);
+      } else if (paiementsPayes.isNotEmpty) {
+        // Si pas de montant attendu mais des paiements, considère comme 100%
+        tauxPaiement = 100.0;
+      }
+
+      final paiementsPayesCount =
+          paiements.where((p) => p['statut'] == 'Payé').length;
+      final paiementsEnRetard =
+          paiements.where((p) => p['statut'] == 'En retard').length;
+
+      // Calcul des mois écoulés depuis le début
+      int moisEcoules =
+          (now.year - dateDebut.year) * 12 + now.month - dateDebut.month;
+      if (moisEcoules < 0) moisEcoules = 0;
+
+      return {
+        'bail': bail,
+        'paiements': paiements,
+        'stats': {
+          'montant_attendu': montantAttendu,
+          'total_paye': totalPaye,
+          'en_retard': enRetard,
+          'taux_paiement': tauxPaiement,
+          'paiements_payes': paiementsPayesCount,
+          'paiements_en_retard': paiementsEnRetard,
+          'mois_ecoules': moisEcoules,
+        },
+      };
+    } catch (e) {
+      print('❌ ERREUR getBailDetails: $e');
+      rethrow;
+    }
+  }
+
+  /// Met à jour un bail
+  Future<Map<String, dynamic>> updateBail({
+    required String bailId,
+    required String dateDebut,
+    required String dateFin,
+    required double montantLoyer,
+    required double caution,
+    required double pasDePorte,
+  }) async {
+    try {
+      // ✅ IMPORTANT: NE PAS mettre à jour le champ 'statut'
+      // Le trigger Supabase le calculera automatiquement lors de l'UPDATE
+      final response = await _supabase
+          .from('baux')
+          .update({
+            'date_debut': dateDebut,
+            'date_fin': dateFin,
+            'montant_loyer': montantLoyer,
+            'montant_caution': caution,
+            'montant_pas_de_porte': pasDePorte,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', bailId)
+          .select('''
+            *,
+            locaux!inner(*, types_locaux(*), etages(*)),
+            commercants(*)
+          ''')
+          .single();
+
+      print(
+          '✅ Bail $bailId mis à jour avec succès - Statut recalculé automatiquement');
+      return response;
+    } catch (e) {
+      print('❌ ERREUR updateBail: $e');
+      rethrow;
+    }
+  }
+
+  /// Résilie un bail (met local en Disponible)
+  Future<Map<String, dynamic>> resilierBail(String bailId) async {
+    try {
+      // Récupère le bail
+      final bail = await _supabase
+          .from('baux')
+          .select('local_id')
+          .eq('id', bailId)
+          .single();
+
+      final localId = bail['local_id'];
+
+      // Met à jour le bail en "Résilié"
+      await _supabase.from('baux').update({
+        'statut': 'Résilié',
+        'date_fin': DateTime.now().toIso8601String().split('T')[0],
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', bailId);
+
+      // Met le local en "Disponible"
+      await _supabase.from('locaux').update({
+        'statut': 'Disponible',
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', localId);
+
+      print('✅ Bail $bailId résilié et local $localId libéré');
+      return {'success': true};
+    } catch (e) {
+      print('❌ ERREUR resilierBail: $e');
       rethrow;
     }
   }

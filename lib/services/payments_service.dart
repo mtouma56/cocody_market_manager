@@ -7,6 +7,14 @@ class PaymentsService {
 
   final _supabase = Supabase.instance.client;
 
+  /// Valide qu'une chaîne est un UUID valide
+  bool _isValidUUID(String? uuid) {
+    if (uuid == null || uuid.isEmpty) return false;
+    final uuidRegExp = RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+    return uuidRegExp.hasMatch(uuid);
+  }
+
   /// Récupère tous les paiements avec leurs informations complètes
   Future<List<Map<String, dynamic>>> getAllPayments() async {
     try {
@@ -21,7 +29,9 @@ class PaymentsService {
         notes,
         created_at,
         baux!inner(
+          id,
           numero_contrat,
+          commercant_id,
           commercants!inner(nom, activite, contact),
           locaux!inner(
             numero,
@@ -43,6 +53,8 @@ class PaymentsService {
 
         payments.add({
           'id': paiement['id'],
+          'merchantId': paiement['baux']
+              ['commercant_id'], // ✅ AJOUT: ID du commerçant
           'amount': (paiement['montant'] as num).toDouble(),
           'dueDate': paiement['date_echeance'],
           'paymentDate': paiement['date_paiement'],
@@ -74,6 +86,96 @@ class PaymentsService {
     }
   }
 
+  /// Récupère les paiements par commerçant (avec validation UUID)
+  Future<List<Map<String, dynamic>>> getPaymentsByMerchant(
+      String? merchantId) async {
+    try {
+      // ✅ VALIDATION: Vérifie si l'UUID du commerçant est valide
+      if (!_isValidUUID(merchantId)) {
+        print(
+            '⚠️ UUID commerçant invalide: $merchantId - Retour de tous les paiements');
+        return await getAllPayments();
+      }
+
+      // ✅ FIX: Vérifier si le merchantId est null ou vide APRÈS la validation UUID
+      if (merchantId == null || merchantId.isEmpty) {
+        print('⚠️ MerchantId null ou vide - Retour de tous les paiements');
+        return await getAllPayments();
+      }
+
+      final response = await _supabase
+          .from('paiements')
+          .select('''
+        id,
+        montant,
+        date_paiement,
+        date_echeance,
+        mois_concerne,
+        statut,
+        mode_paiement,
+        notes,
+        created_at,
+        baux!inner(
+          id,
+          numero_contrat,
+          commercant_id,
+          commercants!inner(nom, activite, contact),
+          locaux!inner(
+            numero,
+            etages!inner(nom, ordre),
+            types_locaux!inner(nom)
+          )
+        )
+      ''')
+          .eq('baux.commercant_id',
+              merchantId) // ✅ Maintenant sûr d'utiliser un UUID valide
+          .order('created_at', ascending: false);
+
+      List<Map<String, dynamic>> payments = [];
+
+      for (var paiement in response) {
+        String urgency = _determineUrgency(
+          paiement['statut'],
+          paiement['date_echeance'],
+          paiement['date_paiement'],
+        );
+
+        payments.add({
+          'id': paiement['id'],
+          'merchantId': paiement['baux']
+              ['commercant_id'], // ✅ AJOUT: ID du commerçant
+          'amount': (paiement['montant'] as num).toDouble(),
+          'dueDate': paiement['date_echeance'],
+          'paymentDate': paiement['date_paiement'],
+          'monthConcerned': paiement['mois_concerne'],
+          'status': _getStatusCode(paiement['statut']),
+          'paymentMethod': _getPaymentMethodCode(paiement['mode_paiement']),
+          'notes': paiement['notes'] ?? '',
+          'urgency': urgency,
+          'tenantName': paiement['baux']['commercants']['nom'],
+          'tenantBusiness': paiement['baux']['commercants']['activite'],
+          'tenantPhone': paiement['baux']['commercants']['contact'],
+          'contractNumber': paiement['baux']['numero_contrat'],
+          'propertyNumber': paiement['baux']['locaux']['numero'],
+          'propertyType': _getPropertyTypeCode(
+            paiement['baux']['locaux']['types_locaux']['nom'],
+          ),
+          'propertyFloor': _getFloorCode(
+            paiement['baux']['locaux']['etages']['ordre'],
+          ),
+          'createdAt': paiement['created_at'],
+        });
+      }
+
+      print(
+          '✅ Récupération de ${payments.length} paiements pour le commerçant $merchantId');
+      return payments;
+    } catch (error) {
+      print('❌ ERREUR getPaymentsByMerchant: $error');
+      throw Exception('Erreur lors du filtrage par commerçant: $error');
+    }
+  }
+
   /// Récupère les paiements par statut
   Future<List<Map<String, dynamic>>> getPaymentsByStatus(String status) async {
     try {
@@ -90,7 +192,9 @@ class PaymentsService {
         notes,
         created_at,
         baux!inner(
+          id,
           numero_contrat,
+          commercant_id,
           commercants!inner(nom, activite, contact),
           locaux!inner(
             numero,
@@ -111,6 +215,8 @@ class PaymentsService {
 
         payments.add({
           'id': paiement['id'],
+          'merchantId': paiement['baux']
+              ['commercant_id'], // ✅ AJOUT: ID du commerçant
           'amount': (paiement['montant'] as num).toDouble(),
           'dueDate': paiement['date_echeance'],
           'paymentDate': paiement['date_paiement'],
@@ -138,6 +244,35 @@ class PaymentsService {
     } catch (error) {
       print('❌ ERREUR getPaymentsByStatus: $error');
       throw Exception('Erreur lors du filtrage par statut: $error');
+    }
+  }
+
+  /// Récupère les détails d'un paiement (avec validation UUID)
+  Future<Map<String, dynamic>> getPaymentDetails(String paymentId) async {
+    try {
+      // ✅ VALIDATION: Vérifie si l'UUID du paiement est valide
+      if (!_isValidUUID(paymentId)) {
+        throw Exception('ID de paiement invalide: $paymentId');
+      }
+
+      final response = await _supabase.from('paiements').select('''
+        *,
+        baux!inner(
+          *,
+          commercants(*),
+          locaux!inner(
+            *,
+            etages(*),
+            types_locaux(*)
+          )
+        )
+      ''').eq('id', paymentId).single();
+
+      print('✅ Détails du paiement $paymentId récupérés');
+      return response;
+    } catch (error) {
+      print('❌ ERREUR getPaymentDetails: $error');
+      throw Exception('Erreur lors de la récupération des détails: $error');
     }
   }
 

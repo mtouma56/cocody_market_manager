@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:sizer/sizer.dart';
 
-import '../../services/payments_service.dart';
-import '../../widgets/custom_app_bar.dart';
+import '../../services/paiements_service.dart';
 import '../../widgets/custom_bottom_bar.dart';
-import '../add_payment_form_screen/add_payment_form_screen.dart';
+import '../payment_details_screen/payment_details_screen.dart';
+import '../../routes/app_routes.dart';
 
 class PaymentsManagementScreen extends StatefulWidget {
-  const PaymentsManagementScreen({super.key});
+  final String? initialCommercantId;
+  final String? initialCommercantName;
+
+  const PaymentsManagementScreen({
+    super.key,
+    this.initialCommercantId,
+    this.initialCommercantName,
+  });
 
   @override
   State<PaymentsManagementScreen> createState() =>
@@ -16,959 +21,361 @@ class PaymentsManagementScreen extends StatefulWidget {
 }
 
 class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
-  String _selectedStatus = 'all';
-  String _searchQuery = '';
-  final TextEditingController _searchController = TextEditingController();
-  bool _isSearchActive = false;
-  List<Map<String, dynamic>> _payments = [];
-  List<Map<String, dynamic>> _filteredPayments = [];
-  bool _isLoading = true;
-  String? _error;
+  final _service = PaiementsService();
 
-  final PaymentsService _paymentsService = PaymentsService();
+  // Variables d'état NÉCESSAIRES
+  String _currentFilter = 'Tous';
+  List<dynamic> _paiements = [];
+  List<dynamic> _allPaiements = []; // IMPORTANT : garde tous les paiements
+  bool _isLoading = true;
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _loadPayments();
+    _loadPaiements();
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
+  Future<void> _loadPaiements() async {
+    print('🟢 Chargement paiements');
+    setState(() => _isLoading = true);
 
-  Future<void> _loadPayments() async {
     try {
+      final response = await _service.getPaiements();
+
+      print('✅ ${response.length} paiements chargés');
+
       setState(() {
-        _isLoading = true;
-        _error = null;
+        _allPaiements = response;
+        _isLoading = false;
       });
 
-      final payments = await _paymentsService.getAllPayments();
-
+      // CRITIQUE : Appelle _applyFilters APRÈS avoir chargé
+      _applyFilters();
+    } catch (e) {
+      print('❌ ERREUR: $e');
       if (mounted) {
-        setState(() {
-          _payments = payments ?? [];
-          _isLoading = false;
-        });
-
-        _filterPayments();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        );
       }
-    } catch (error) {
-      print('❌ ERREUR _loadPayments: $error');
-      if (mounted) {
-        setState(() {
-          _error = error.toString();
-          _isLoading = false;
-          _payments = [];
-        });
-      }
+      setState(() => _isLoading = false);
     }
   }
 
-  void _filterPayments() {
-    setState(() {
-      _filteredPayments =
-          _payments.where((payment) {
-            // Status filter
-            bool statusMatch =
-                _selectedStatus == 'all' ||
-                (payment['status']?.toString() ?? '') == _selectedStatus;
+  // _applyFilters CORRIGÉ avec logs
+  void _applyFilters() {
+    print('🔍 Application filtre: $_currentFilter');
+    print('📊 Total paiements: ${_allPaiements.length}');
 
-            // Search filter
-            bool searchMatch =
-                _searchQuery.isEmpty ||
-                (payment['tenantName']?.toString() ?? '')
-                    .toLowerCase()
-                    .contains(_searchQuery.toLowerCase()) ||
-                (payment['contractNumber']?.toString() ?? '')
-                    .toLowerCase()
-                    .contains(_searchQuery.toLowerCase()) ||
-                (payment['propertyNumber']?.toString() ?? '')
-                    .toLowerCase()
-                    .contains(_searchQuery.toLowerCase());
+    List<dynamic> filtered = List.from(_allPaiements);
 
-            return statusMatch && searchMatch;
+    // Filtre par statut
+    if (_currentFilter != 'Tous') {
+      // CORRECTION : Map les labels UI vers les statuts DB
+      String statutDB = _currentFilter;
+
+      // Convertir le label UI en statut DB
+      if (_currentFilter == 'Payés') {
+        statutDB = 'Payé'; // Singulier dans la DB
+      }
+
+      filtered =
+          filtered.where((p) {
+            final statut = p['statut']?.toString() ?? '';
+            return statut == statutDB;
           }).toList();
 
-      // Sort by urgency then by due date
-      _filteredPayments.sort((a, b) {
-        const urgencyOrder = {'high': 0, 'medium': 1, 'low': 2};
-        int urgencyA = urgencyOrder[a['urgency']?.toString()] ?? 2;
-        int urgencyB = urgencyOrder[b['urgency']?.toString()] ?? 2;
+      print('Après filtre statut "$statutDB": ${filtered.length} paiements');
+    }
 
-        if (urgencyA != urgencyB) {
-          return urgencyA.compareTo(urgencyB);
-        }
+    // Filtre par recherche
+    if (_searchController.text.isNotEmpty) {
+      final searchTerm = _searchController.text.toLowerCase();
+      filtered =
+          filtered.where((paiement) {
+            final bail = paiement['baux'] as Map<String, dynamic>?;
+            final commercant = bail?['commercants'] as Map<String, dynamic>?;
+            final nomCommercant =
+                commercant?['nom']?.toString().toLowerCase() ?? '';
 
-        try {
-          DateTime dateA = DateTime.parse(a['dueDate']?.toString() ?? '');
-          DateTime dateB = DateTime.parse(b['dueDate']?.toString() ?? '');
-          return dateA.compareTo(dateB);
-        } catch (e) {
-          return 0;
-        }
-      });
-    });
-  }
+            return nomCommercant.contains(searchTerm);
+          }).toList();
 
-  void _onStatusFilterChanged(String status) {
+      print('Après recherche: ${filtered.length} paiements');
+    }
+
+    print('✅ Résultat final: ${filtered.length} paiements');
+
     setState(() {
-      _selectedStatus = status;
+      _paiements = filtered;
     });
-    _filterPayments();
-    HapticFeedback.lightImpact();
-  }
-
-  void _onSearchChanged(String query) {
-    setState(() {
-      _searchQuery = query;
-    });
-    _filterPayments();
-  }
-
-  void _toggleSearch() {
-    setState(() {
-      _isSearchActive = !_isSearchActive;
-      if (!_isSearchActive) {
-        _searchController.clear();
-        _searchQuery = '';
-        _filterPayments();
-      }
-    });
-    HapticFeedback.lightImpact();
-  }
-
-  void _onPaymentTap(Map<String, dynamic> payment) {
-    HapticFeedback.lightImpact();
-    _showPaymentDetails(payment);
-  }
-
-  void _showPaymentDetails(Map<String, dynamic> payment) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('Paiement ${payment['monthConcerned'] ?? 'N/A'}'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Locataire: ${payment['tenantName'] ?? 'N/A'}'),
-                Text('Activité: ${payment['tenantBusiness'] ?? 'N/A'}'),
-                Text(
-                  'Local: ${payment['propertyNumber'] ?? 'N/A'} (${payment['propertyFloor'] ?? 'N/A'})',
-                ),
-                Text(
-                  'Montant: ${_formatAmount((payment['amount'] as num?)?.toDouble() ?? 0)} FCFA',
-                ),
-                Text(
-                  'Échéance: ${_formatDate(payment['dueDate']?.toString() ?? '')}',
-                ),
-                if (payment['paymentDate'] != null)
-                  Text(
-                    'Payé le: ${_formatDate(payment['paymentDate']?.toString() ?? '')}',
-                  ),
-                if (payment['paymentMethod'] != null)
-                  Text(
-                    'Mode: ${_getPaymentMethodLabel(payment['paymentMethod']?.toString())}',
-                  ),
-                Text(
-                  'Statut: ${_getStatusLabel(payment['status']?.toString())}',
-                ),
-                Text('Contrat: ${payment['contractNumber'] ?? 'N/A'}'),
-                if (payment['notes']?.toString().isNotEmpty == true)
-                  Text('Notes: ${payment['notes']}'),
-                if (payment['tenantPhone']?.toString().isNotEmpty == true)
-                  Text('Téléphone: ${payment['tenantPhone']}'),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Fermer'),
-              ),
-              if (payment['status'] == 'pending' ||
-                  payment['status'] == 'overdue')
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _markAsPaid(payment);
-                  },
-                  child: const Text('Marquer payé'),
-                ),
-              if (payment['tenantPhone']?.toString().isNotEmpty == true)
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _callTenant(payment['tenantPhone']?.toString() ?? '');
-                  },
-                  child: const Text('Appeler'),
-                ),
-            ],
-          ),
-    );
-  }
-
-  void _markAsPaid(Map<String, dynamic> payment) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Confirmer le paiement'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Marquer comme payé le paiement de ${_formatAmount((payment['amount'] as num?)?.toDouble() ?? 0)} FCFA pour ${payment['tenantName'] ?? 'N/A'} ?',
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  decoration: const InputDecoration(
-                    labelText: 'Mode de paiement',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'cash', child: Text('Espèces')),
-                    DropdownMenuItem(
-                      value: 'transfer',
-                      child: Text('Virement'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'mobile_money',
-                      child: Text('Mobile Money'),
-                    ),
-                    DropdownMenuItem(value: 'check', child: Text('Chèque')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      _updatePaymentStatus(
-                        payment['id']?.toString() ?? '',
-                        'paid',
-                        value,
-                      );
-                      Navigator.pop(context);
-                    }
-                  },
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Annuler'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  Future<void> _updatePaymentStatus(
-    String paymentId,
-    String status,
-    String? paymentMethod,
-  ) async {
-    try {
-      await _paymentsService.updatePaymentStatus(
-        paymentId,
-        status,
-        paymentMethod: paymentMethod,
-      );
-
-      await _loadPayments(); // Reload data
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Statut mis à jour avec succès'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur: ${error.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  void _callTenant(String phoneNumber) {
-    HapticFeedback.lightImpact();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Appel de $phoneNumber'),
-        action: SnackBarAction(label: 'OK', onPressed: () {}),
-      ),
-    );
-  }
-
-  void _showNewPaymentDialog() async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const AddPaymentFormScreen()),
-    );
-    if (result == true) {
-      _loadPayments();
-    }
-  }
-
-  String _formatAmount(double amount) {
-    return amount
-        .toStringAsFixed(0)
-        .replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (Match m) => '${m[1]} ',
-        );
-  }
-
-  String _formatDate(String dateStr) {
-    try {
-      if (dateStr.isEmpty) return 'N/A';
-      DateTime date = DateTime.parse(dateStr);
-      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-    } catch (e) {
-      return 'N/A';
-    }
-  }
-
-  String _getStatusLabel(String? status) {
-    switch (status) {
-      case 'paid':
-        return 'Payé';
-      case 'pending':
-        return 'En attente';
-      case 'overdue':
-        return 'En retard';
-      default:
-        return 'Inconnu';
-    }
-  }
-
-  String _getPaymentMethodLabel(String? method) {
-    switch (method) {
-      case 'cash':
-        return 'Espèces';
-      case 'transfer':
-        return 'Virement';
-      case 'mobile_money':
-        return 'Mobile Money';
-      case 'check':
-        return 'Chèque';
-      default:
-        return 'Non spécifié';
-    }
-  }
-
-  Future<void> _onRefresh() async {
-    HapticFeedback.mediumImpact();
-    await _loadPayments();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Données mises à jour'),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    }
-  }
-
-  Widget _buildLoadingState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Chargement des paiements...'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.error_outline, color: Colors.red, size: 64),
-          SizedBox(height: 2.h),
-          Text(
-            'Erreur de chargement',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(color: Colors.red),
-          ),
-          SizedBox(height: 1.h),
-          Text(
-            _error ?? 'Une erreur est survenue',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-            textAlign: TextAlign.center,
-          ),
-          SizedBox(height: 2.h),
-          ElevatedButton(
-            onPressed: _loadPayments,
-            child: const Text('Réessayer'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMetricsCards() {
-    final metrics = _calculateMetrics();
-
-    return Container(
-      padding: EdgeInsets.all(4.w),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildMetricCard(
-              'Total',
-              '${metrics['totalCount']}',
-              'Paiements',
-              Colors.blue,
-              Icons.payment,
-            ),
-          ),
-          SizedBox(width: 2.w),
-          Expanded(
-            child: _buildMetricCard(
-              'En attente',
-              '${metrics['pendingCount']}',
-              '${_formatAmount(metrics['pendingAmount'])} FCFA',
-              Colors.orange,
-              Icons.schedule,
-            ),
-          ),
-          SizedBox(width: 2.w),
-          Expanded(
-            child: _buildMetricCard(
-              'Payés',
-              '${metrics['paidCount']}',
-              '${_formatAmount(metrics['paidAmount'])} FCFA',
-              Colors.green,
-              Icons.check_circle,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMetricCard(
-    String title,
-    String count,
-    String subtitle,
-    Color color,
-    IconData icon,
-  ) {
-    return Container(
-      padding: EdgeInsets.all(3.w),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: Colors.white, size: 20),
-          SizedBox(height: 1.h),
-          Text(
-            count,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-          Text(
-            subtitle,
-            style: const TextStyle(color: Colors.white70, fontSize: 10),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusFilterChips() {
-    final statuses = [
-      {'code': 'all', 'label': 'Tous'},
-      {'code': 'pending', 'label': 'En attente'},
-      {'code': 'paid', 'label': 'Payés'},
-      {'code': 'overdue', 'label': 'En retard'},
-    ];
-
-    return Container(
-      padding: EdgeInsets.all(2.w),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children:
-              statuses.map((status) {
-                final isSelected = _selectedStatus == status['code'];
-                return Padding(
-                  padding: EdgeInsets.only(right: 2.w),
-                  child: FilterChip(
-                    label: Text(status['label'] ?? ''),
-                    selected: isSelected,
-                    onSelected:
-                        (_) => _onStatusFilterChanged(status['code'] ?? ''),
-                    backgroundColor: Colors.grey[200],
-                    selectedColor: Theme.of(context).primaryColor,
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black87,
-                    ),
-                  ),
-                );
-              }).toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPaymentCard(Map<String, dynamic> payment) {
-    final urgencyColor = _getUrgencyColor(payment['urgency']?.toString());
-    final statusColor = _getStatusColor(payment['status']?.toString());
-
-    return Card(
-      margin: EdgeInsets.symmetric(horizontal: 4.w, vertical: 1.h),
-      elevation: 2,
-      child: InkWell(
-        onTap: () => _onPaymentTap(payment),
-        child: Padding(
-          padding: EdgeInsets.all(4.w),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header with month and urgency
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Paiement ${payment['monthConcerned'] ?? 'N/A'}',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 2.w,
-                      vertical: 0.5.h,
-                    ),
-                    decoration: BoxDecoration(
-                      color: urgencyColor,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _getUrgencyLabel(payment['urgency']?.toString()),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 2.w),
-
-              // Tenant info
-              Row(
-                children: [
-                  Icon(Icons.person, size: 16, color: Colors.grey[600]),
-                  SizedBox(width: 1.w),
-                  Expanded(
-                    child: Text(
-                      payment['tenantName']?.toString() ?? 'N/A',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 1.w),
-
-              // Property info
-              Row(
-                children: [
-                  Icon(Icons.business, size: 16, color: Colors.grey[600]),
-                  SizedBox(width: 1.w),
-                  Text(
-                    'Local ${payment['propertyNumber'] ?? 'N/A'} • ${payment['tenantBusiness'] ?? 'N/A'}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-              SizedBox(height: 1.w),
-
-              // Amount and status
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '${_formatAmount((payment['amount'] as num?)?.toDouble() ?? 0)} FCFA',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).primaryColor,
-                    ),
-                  ),
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 2.w,
-                      vertical: 0.5.h,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _getStatusLabel(payment['status']?.toString()),
-                      style: const TextStyle(color: Colors.white, fontSize: 11),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 1.w),
-
-              // Dates
-              Text(
-                'Échéance: ${_formatDate(payment['dueDate']?.toString() ?? '')}',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-              ),
-              if (payment['paymentDate'] != null)
-                Text(
-                  'Payé le: ${_formatDate(payment['paymentDate']?.toString() ?? '')}',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.green[600]),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Map<String, dynamic> _calculateMetrics() {
-    double totalAmount = 0;
-    double paidAmount = 0;
-    double pendingAmount = 0;
-    double overdueAmount = 0;
-    int totalCount = _payments.length;
-    int paidCount = 0;
-    int pendingCount = 0;
-    int overdueCount = 0;
-
-    for (var payment in _payments) {
-      final amount = (payment['amount'] as num?)?.toDouble() ?? 0;
-      final status = payment['status']?.toString() ?? '';
-
-      totalAmount += amount;
-
-      switch (status) {
-        case 'paid':
-          paidAmount += amount;
-          paidCount++;
-          break;
-        case 'pending':
-          pendingAmount += amount;
-          pendingCount++;
-          break;
-        case 'overdue':
-          overdueAmount += amount;
-          overdueCount++;
-          break;
-      }
-    }
-
-    return {
-      'totalAmount': totalAmount,
-      'paidAmount': paidAmount,
-      'pendingAmount': pendingAmount,
-      'overdueAmount': overdueAmount,
-      'totalCount': totalCount,
-      'paidCount': paidCount,
-      'pendingCount': pendingCount,
-      'overdueCount': overdueCount,
-    };
-  }
-
-  Color _getUrgencyColor(String? urgency) {
-    switch (urgency) {
-      case 'high':
-        return Colors.red;
-      case 'medium':
-        return Colors.orange;
-      default:
-        return Colors.green;
-    }
-  }
-
-  String _getUrgencyLabel(String? urgency) {
-    switch (urgency) {
-      case 'high':
-        return 'URGENT';
-      case 'medium':
-        return 'ATTENTION';
-      default:
-        return 'OK';
-    }
-  }
-
-  Color _getStatusColor(String? status) {
-    switch (status) {
-      case 'paid':
-        return Colors.green;
-      case 'pending':
-        return Colors.orange;
-      case 'overdue':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Calcule depuis _allPaiements
+    final countTous = _allPaiements.length;
+    final countPayes = _allPaiements.where((p) => p['statut'] == 'Payé').length;
+    final countEnAttente =
+        _allPaiements.where((p) => p['statut'] == 'En attente').length;
+    final countEnRetard =
+        _allPaiements.where((p) => p['statut'] == 'En retard').length;
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar:
-          _isSearchActive
-              ? AppBar(
-                backgroundColor: Colors.white,
-                elevation: 1,
-                leading: IconButton(
-                  onPressed: _toggleSearch,
-                  icon: const Icon(Icons.arrow_back, color: Colors.black87),
+      appBar: AppBar(title: Text('Paiements')),
+      body: Column(
+        children: [
+          // Barre recherche
+          Padding(
+            padding: EdgeInsets.all(16),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Rechercher par commerçant, ...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) {
+                print('🔎 Recherche: $value');
+                _applyFilters();
+              },
+            ),
+          ),
+
+          // Filtres
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                _FilterChip(
+                  label: 'Tous ($countTous)',
+                  isSelected: _currentFilter == 'Tous',
+                  onTap: () {
+                    print('👆 Clic sur Tous');
+                    setState(() => _currentFilter = 'Tous');
+                    _applyFilters(); // IMPORTANT
+                  },
                 ),
-                title: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'Rechercher paiements...',
-                    border: InputBorder.none,
-                  ),
-                  onChanged: _onSearchChanged,
+                SizedBox(width: 8),
+                _FilterChip(
+                  label: 'En attente ($countEnAttente)',
+                  isSelected: _currentFilter == 'En attente',
+                  color: Colors.orange,
+                  onTap: () {
+                    print('👆 Clic sur En attente');
+                    setState(() => _currentFilter = 'En attente');
+                    _applyFilters(); // IMPORTANT
+                  },
                 ),
-                actions: [
-                  if (_searchController.text.isNotEmpty)
-                    IconButton(
-                      onPressed: () {
-                        _searchController.clear();
-                        _onSearchChanged('');
-                      },
-                      icon: const Icon(Icons.clear, color: Colors.black87),
+                SizedBox(width: 8),
+                _FilterChip(
+                  label: 'Payés ($countPayes)',
+                  isSelected: _currentFilter == 'Payés',
+                  color: Colors.green,
+                  onTap: () {
+                    print('👆 Clic sur Payés');
+                    setState(() => _currentFilter = 'Payés');
+                    _applyFilters(); // IMPORTANT
+                  },
+                ),
+                SizedBox(width: 8),
+                _FilterChip(
+                  label: 'En retard ($countEnRetard)',
+                  isSelected: _currentFilter == 'En retard',
+                  color: Colors.red,
+                  onTap: () {
+                    print('👆 Clic sur En retard');
+                    setState(() => _currentFilter = 'En retard');
+                    _applyFilters(); // IMPORTANT
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          SizedBox(height: 16),
+
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '${_paiements.length} paiement${_paiements.length > 1 ? "s" : ""} trouvé${_paiements.length > 1 ? "s" : ""}',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          ),
+
+          SizedBox(height: 8),
+
+          Expanded(
+            child:
+                _isLoading
+                    ? Center(child: CircularProgressIndicator())
+                    : _paiements.isEmpty
+                    ? Center(child: Text('Aucun paiement trouvé'))
+                    : RefreshIndicator(
+                      onRefresh: _loadPaiements,
+                      child: ListView.builder(
+                        itemCount: _paiements.length,
+                        itemBuilder: (context, index) {
+                          final paiement = _paiements[index];
+                          return _buildPaiementCard(paiement);
+                        },
+                      ),
                     ),
-                ],
-              )
-              : CustomAppBar(
-                title: 'Paiements',
-                variant: CustomAppBarVariant.withActions,
-                onSearchPressed: _toggleSearch,
-              ),
-      drawer: Drawer(
-        backgroundColor: Colors.white,
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: Theme.of(context).primaryColor),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.payment, color: Colors.white, size: 40),
-                  SizedBox(height: 1.h),
-                  Text(
-                    'Cocody Market Manager',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    'Gestion des paiements',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
-                  ),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.dashboard),
-              title: const Text('Tableau de bord'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/dashboard-screen');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.business),
-              title: const Text('Locaux'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/properties-management-screen');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.store),
-              title: const Text('Commerçants'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/merchants-management-screen');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.description),
-              title: const Text('Baux'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/lease-management-screen');
-              },
-            ),
-            ListTile(
-              leading: Icon(
-                Icons.payment,
-                color: Theme.of(context).primaryColor,
-              ),
-              title: const Text('Paiements'),
-              selected: true,
-              selectedTileColor: Theme.of(context).primaryColor.withAlpha(26),
-              onTap: () => Navigator.pop(context),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Paramètres'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/settings-screen');
-              },
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
-      body:
-          _isLoading
-              ? _buildLoadingState()
-              : _error != null
-              ? _buildErrorState()
-              : RefreshIndicator(
-                onRefresh: _onRefresh,
-                color: Theme.of(context).primaryColor,
-                child: Column(
-                  children: [
-                    // Metrics cards
-                    _buildMetricsCards(),
-
-                    // Status filter chips
-                    _buildStatusFilterChips(),
-
-                    // Payments count
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 4.w,
-                        vertical: 1.h,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            '${_filteredPayments.length} paiement${_filteredPayments.length > 1 ? 's' : ''} trouvé${_filteredPayments.length > 1 ? 's' : ''}',
-                            style: Theme.of(
-                              context,
-                            ).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          if (_selectedStatus != 'all' ||
-                              _searchQuery.isNotEmpty)
-                            TextButton(
-                              onPressed: () {
-                                setState(() {
-                                  _selectedStatus = 'all';
-                                  _searchQuery = '';
-                                  _searchController.clear();
-                                });
-                                _filterPayments();
-                              },
-                              child: const Text('Effacer filtres'),
-                            ),
-                        ],
-                      ),
-                    ),
-
-                    // Payments list
-                    Expanded(
-                      child:
-                          _filteredPayments.isEmpty
-                              ? Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.search_off,
-                                      color: Colors.grey[400],
-                                      size: 64,
-                                    ),
-                                    SizedBox(height: 2.h),
-                                    Text(
-                                      'Aucun paiement trouvé',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(color: Colors.grey[600]),
-                                    ),
-                                    SizedBox(height: 1.h),
-                                    Text(
-                                      'Essayez de modifier vos filtres',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
-                                          ?.copyWith(color: Colors.grey[500]),
-                                    ),
-                                  ],
-                                ),
-                              )
-                              : ListView.builder(
-                                padding: EdgeInsets.only(bottom: 2.w),
-                                itemCount: _filteredPayments.length,
-                                itemBuilder: (context, index) {
-                                  final payment = _filteredPayments[index];
-                                  return _buildPaymentCard(payment);
-                                },
-                              ),
-                    ),
-                  ],
-                ),
-              ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showNewPaymentDialog,
-        backgroundColor: Theme.of(context).primaryColor,
-        child: const Icon(Icons.add, color: Colors.white),
+        onPressed: () async {
+          final result = await Navigator.pushNamed(
+            context,
+            AppRoutes.addPaymentFormScreen,
+          );
+
+          if (result == true) {
+            _loadPaiements();
+          }
+        },
+        backgroundColor: Colors.green,
+        tooltip: 'Créer un nouveau paiement',
+        child: const Icon(Icons.add, color: Colors.white, size: 28),
       ),
       bottomNavigationBar: const CustomBottomBar(
         currentIndex: 4,
         variant: CustomBottomBarVariant.standard,
+      ),
+    );
+  }
+
+  Widget _buildPaiementCard(Map<String, dynamic> paiement) {
+    final bail = paiement['baux'] as Map<String, dynamic>?;
+    final commercant = bail?['commercants'] as Map<String, dynamic>?;
+    final local = bail?['locaux'] as Map<String, dynamic>?;
+
+    final montant = (paiement['montant'] as num?)?.toDouble() ?? 0;
+    final statut = paiement['statut']?.toString() ?? 'Inconnu';
+    final moisConcerne = paiement['mois_concerne']?.toString() ?? 'N/A';
+    final dateEcheance = paiement['date_echeance']?.toString() ?? 'N/A';
+    final datePaiement = paiement['date_paiement']?.toString() ?? 'N/A';
+    final nomCommercant =
+        commercant?['nom']?.toString() ?? 'Commerçant inconnu';
+    final numeroLocal = local?['numero']?.toString() ?? 'N/A';
+
+    Color statutColor = Colors.grey;
+    if (statut == 'Payé') statutColor = Colors.green;
+    if (statut == 'En retard') statutColor = Colors.red;
+    if (statut == 'Partiel') statutColor = Colors.orange;
+    if (statut == 'En attente') statutColor = Colors.blue;
+
+    return Card(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListTile(
+        leading: Icon(Icons.payment, color: statutColor, size: 32),
+        title: Text(
+          '${montant.toStringAsFixed(0)} FCFA',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.person, size: 14, color: Colors.grey),
+                SizedBox(width: 4),
+                Expanded(
+                  child: Text(nomCommercant, overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                Icon(Icons.store, size: 14, color: Colors.grey),
+                SizedBox(width: 4),
+                Text('Local $numeroLocal'),
+              ],
+            ),
+            SizedBox(height: 4),
+            Text(
+              'Échéance: $dateEcheance',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            ),
+            Text(
+              'Payé le: $datePaiement',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+        trailing: Container(
+          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: statutColor.withAlpha(51),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            statut,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: statutColor,
+            ),
+          ),
+        ),
+        onTap: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => PaymentDetailsScreen(paiementId: paiement['id']),
+            ),
+          );
+
+          if (result == true) {
+            _loadPaiements();
+          }
+        },
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final Color? color;
+
+  const _FilterChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final chipColor = color ?? Colors.blue;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? chipColor : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: isSelected ? Colors.white : Colors.grey.shade700,
+          ),
+        ),
       ),
     );
   }

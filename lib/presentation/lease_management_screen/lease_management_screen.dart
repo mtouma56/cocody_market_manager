@@ -1,750 +1,480 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:sizer/sizer.dart';
 
 import '../../services/leases_service.dart';
-import '../../widgets/custom_app_bar.dart';
 import '../../widgets/custom_bottom_bar.dart';
+import '../lease_details_screen/lease_details_screen.dart';
+import '../../routes/app_routes.dart';
 
 class LeaseManagementScreen extends StatefulWidget {
-  const LeaseManagementScreen({super.key});
+  final String? initialCommercantId;
+  final String? initialCommercantName;
+
+  const LeaseManagementScreen({
+    super.key,
+    this.initialCommercantId,
+    this.initialCommercantName,
+  });
 
   @override
   State<LeaseManagementScreen> createState() => _LeaseManagementScreenState();
 }
 
 class _LeaseManagementScreenState extends State<LeaseManagementScreen> {
-  String _selectedStatus = 'all';
-  String _searchQuery = '';
-  final TextEditingController _searchController = TextEditingController();
-  bool _isSearchActive = false;
-  List<Map<String, dynamic>> _leases = [];
-  List<Map<String, dynamic>> _filteredLeases = [];
+  // Variables d'état nécessaires
+  String _currentFilter = 'Tous';
+  List<dynamic> _baux = [];
+  List<dynamic> _allBaux = []; // Garde TOUS les baux pour filtrage
   bool _isLoading = true;
-  String? _error;
+  final _searchController = TextEditingController();
 
-  final LeasesService _leasesService = LeasesService();
+  final LeasesService _service = LeasesService();
 
   @override
   void initState() {
     super.initState();
-    _loadLeases();
-  }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadLeases() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-
-      final leases = await _leasesService.getAllLeases();
-
-      if (mounted) {
-        setState(() {
-          _leases = leases ?? [];
-          _isLoading = false;
-        });
-
-        _filterLeases();
-      }
-    } catch (error) {
-      print('❌ ERREUR _loadLeases: $error');
-      if (mounted) {
-        setState(() {
-          _error = error.toString();
-          _isLoading = false;
-          _leases = [];
-        });
-      }
+    // Si commercant passé en paramètre, applique le filtre
+    if (widget.initialCommercantId != null) {
+      _searchController.text = widget.initialCommercantName ?? '';
     }
+
+    _loadBaux();
   }
 
-  void _filterLeases() {
-    setState(() {
-      _filteredLeases =
-          _leases.where((lease) {
-            // Status filter
-            bool statusMatch =
-                _selectedStatus == 'all' ||
-                (lease['status']?.toString() ?? '') == _selectedStatus;
+  // Méthode _loadBaux COMPLÈTE avec relations
+  Future<void> _loadBaux() async {
+    print('🔵 Début chargement baux');
+    setState(() => _isLoading = true);
 
-            // Search filter
-            bool searchMatch =
-                _searchQuery.isEmpty ||
-                (lease['tenantName']?.toString() ?? '').toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ) ||
-                (lease['contractNumber']?.toString() ?? '')
-                    .toLowerCase()
-                    .contains(_searchQuery.toLowerCase()) ||
-                (lease['propertyNumber']?.toString() ?? '')
-                    .toLowerCase()
-                    .contains(_searchQuery.toLowerCase());
+    try {
+      List<Map<String, dynamic>> response;
 
-            return statusMatch && searchMatch;
-          }).toList();
-
-      // Sort by urgency then by end date
-      _filteredLeases.sort((a, b) {
-        const urgencyOrder = {'high': 0, 'medium': 1, 'low': 2};
-        int urgencyA = urgencyOrder[a['urgency']?.toString()] ?? 2;
-        int urgencyB = urgencyOrder[b['urgency']?.toString()] ?? 2;
-
-        if (urgencyA != urgencyB) {
-          return urgencyA.compareTo(urgencyB);
-        }
-
-        try {
-          DateTime dateA = DateTime.parse(a['endDate']?.toString() ?? '');
-          DateTime dateB = DateTime.parse(b['endDate']?.toString() ?? '');
-          return dateA.compareTo(dateB);
-        } catch (e) {
-          return 0;
-        }
-      });
-    });
-  }
-
-  void _onStatusFilterChanged(String status) {
-    setState(() {
-      _selectedStatus = status;
-    });
-    _filterLeases();
-    HapticFeedback.lightImpact();
-  }
-
-  void _onSearchChanged(String query) {
-    setState(() {
-      _searchQuery = query;
-    });
-    _filterLeases();
-  }
-
-  void _toggleSearch() {
-    setState(() {
-      _isSearchActive = !_isSearchActive;
-      if (!_isSearchActive) {
-        _searchController.clear();
-        _searchQuery = '';
-        _filterLeases();
+      // Si un commerçant spécifique est demandé, filtre par commerçant
+      if (widget.initialCommercantId != null) {
+        response =
+            await _service.getLeasesByMerchant(widget.initialCommercantId);
+      } else {
+        // Sinon charge tous les baux
+        response = await _service.getAllLeases();
       }
-    });
-    HapticFeedback.lightImpact();
-  }
 
-  void _onLeaseTap(Map<String, dynamic> lease) {
-    HapticFeedback.lightImpact();
-    _showLeaseDetails(lease);
-  }
+      print('✅ Reçu ${response.length} baux');
+      if (response.isNotEmpty) {
+        print('Premier bail: ${response[0]['contractNumber']}');
+        print('Tenant: ${response[0]['tenantName']}');
+      }
 
-  void _showLeaseDetails(Map<String, dynamic> lease) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('Bail ${lease['contractNumber'] ?? 'N/A'}'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Locataire: ${lease['tenantName'] ?? 'N/A'}'),
-                Text('Activité: ${lease['tenantBusiness'] ?? 'N/A'}'),
-                Text(
-                  'Local: ${lease['propertyNumber'] ?? 'N/A'} (${lease['propertyFloor'] ?? 'N/A'})',
-                ),
-                Text(
-                  'Type: ${_getPropertyTypeLabel(lease['propertyType']?.toString())}',
-                ),
-                Text('Superficie: ${lease['propertySize'] ?? 'N/A'}'),
-                Text(
-                  'Loyer: ${_formatAmount((lease['monthlyRent'] as num?)?.toDouble() ?? 0)} FCFA/mois',
-                ),
-                Text(
-                  'Début: ${_formatDate(lease['startDate']?.toString() ?? '')}',
-                ),
-                Text('Fin: ${_formatDate(lease['endDate']?.toString() ?? '')}'),
-                Text('Statut: ${_getStatusLabel(lease['status']?.toString())}'),
-                Text(
-                  'Prochain paiement: ${_formatDate(lease['nextPaymentDate']?.toString() ?? '')}',
-                ),
-                if (lease['tenantPhone']?.toString().isNotEmpty == true)
-                  Text('Téléphone: ${lease['tenantPhone']}'),
-                if (lease['tenantEmail']?.toString().isNotEmpty == true)
-                  Text('Email: ${lease['tenantEmail']}'),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Fermer'),
-              ),
-              if (lease['tenantPhone']?.toString().isNotEmpty == true)
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _callTenant(lease['tenantPhone']?.toString() ?? '');
+      // Convertit les données du service vers le format attendu par l'UI
+      final convertedBaux = response
+          .map((lease) => {
+                'id': lease['id'],
+                'numero_contrat': lease['contractNumber'],
+                'statut': _convertStatusFromService(lease['status']),
+                'date_debut': lease['startDate'],
+                'date_fin': lease['endDate'],
+                'montant_loyer': lease['monthlyRent'],
+                'commercant_id': lease['merchantId'],
+                'commercants': {
+                  'nom': lease['tenantName'],
+                  'activite': lease['tenantBusiness'],
+                  'contact': lease['tenantPhone'],
+                  'email': lease['tenantEmail'],
+                },
+                'locaux': {
+                  'numero': lease['propertyNumber'],
+                  'types_locaux': {
+                    'nom': _convertPropertyTypeToName(lease['propertyType']),
                   },
-                  child: const Text('Appeler'),
-                ),
-            ],
-          ),
-    );
-  }
+                  'etages': {
+                    'nom': _convertFloorToName(lease['propertyFloor']),
+                  },
+                },
+              })
+          .toList();
 
-  void _callTenant(String phoneNumber) {
-    HapticFeedback.lightImpact();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Appel de $phoneNumber'),
-        action: SnackBarAction(label: 'OK', onPressed: () {}),
-      ),
-    );
-  }
-
-  String _formatAmount(double amount) {
-    return amount
-        .toStringAsFixed(0)
-        .replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (Match m) => '${m[1]} ',
-        );
-  }
-
-  String _formatDate(String dateStr) {
-    try {
-      if (dateStr.isEmpty) return 'N/A';
-      DateTime date = DateTime.parse(dateStr);
-      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+      setState(() {
+        _allBaux = convertedBaux;
+        _applyFilters();
+        _isLoading = false;
+      });
     } catch (e) {
-      return 'N/A';
+      print('❌ ERREUR chargement: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+      setState(() => _isLoading = false);
     }
   }
 
-  String _getStatusLabel(String? status) {
-    switch (status) {
+  // Convertit le status code du service vers le status français
+  String _convertStatusFromService(String statusCode) {
+    switch (statusCode) {
       case 'active':
         return 'Actif';
       case 'expiring':
         return 'Expire bientôt';
       case 'expired':
         return 'Expiré';
+      case 'terminated':
+        return 'Résilié';
       default:
-        return 'Inconnu';
+        return 'Actif';
     }
   }
 
-  String _getPropertyTypeLabel(String? type) {
-    switch (type) {
+  // Convertit le code du type de propriété vers le nom français
+  String _convertPropertyTypeToName(String typeCode) {
+    switch (typeCode) {
       case '9m2_shop':
         return 'Boutique 9m²';
       case '4.5m2_shop':
         return 'Boutique 4.5m²';
-      case 'bank':
-        return 'Banque';
       case 'restaurant':
         return 'Restaurant';
+      case 'bank':
+        return 'Banque';
       case 'box':
         return 'Box';
       case 'market_stall':
-        return 'Étal Marché';
+        return 'Étal';
       default:
-        return 'Local Commercial';
+        return 'Boutique';
     }
   }
 
-  Future<void> _onRefresh() async {
-    HapticFeedback.mediumImpact();
-    await _loadLeases();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Données mises à jour'),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    }
-  }
-
-  Widget _buildLoadingState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Chargement des baux...'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.error_outline, color: Colors.red, size: 64),
-          SizedBox(height: 2.h),
-          Text(
-            'Erreur de chargement',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(color: Colors.red),
-          ),
-          SizedBox(height: 1.h),
-          Text(
-            _error ?? 'Une erreur est survenue',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-            textAlign: TextAlign.center,
-          ),
-          SizedBox(height: 2.h),
-          ElevatedButton(
-            onPressed: _loadLeases,
-            child: const Text('Réessayer'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusFilterChips() {
-    final statuses = [
-      {'code': 'all', 'label': 'Tous'},
-      {'code': 'active', 'label': 'Actifs'},
-      {'code': 'expiring', 'label': 'Expirent bientôt'},
-      {'code': 'expired', 'label': 'Expirés'},
-    ];
-
-    return Container(
-      padding: EdgeInsets.all(2.w),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children:
-              statuses.map((status) {
-                final isSelected = _selectedStatus == status['code'];
-                return Padding(
-                  padding: EdgeInsets.only(right: 2.w),
-                  child: FilterChip(
-                    label: Text(status['label'] ?? ''),
-                    selected: isSelected,
-                    onSelected:
-                        (_) => _onStatusFilterChanged(status['code'] ?? ''),
-                    backgroundColor: Colors.grey[200],
-                    selectedColor: Theme.of(context).primaryColor,
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black87,
-                    ),
-                  ),
-                );
-              }).toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLeaseCard(Map<String, dynamic> lease) {
-    final urgencyColor = _getUrgencyColor(lease['urgency']?.toString());
-    final statusColor = _getStatusColor(lease['status']?.toString());
-
-    return Card(
-      margin: EdgeInsets.symmetric(horizontal: 4.w, vertical: 1.h),
-      elevation: 2,
-      child: InkWell(
-        onTap: () => _onLeaseTap(lease),
-        child: Padding(
-          padding: EdgeInsets.all(4.w),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header with contract number and urgency
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Bail ${lease['contractNumber'] ?? 'N/A'}',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 2.w,
-                      vertical: 0.5.h,
-                    ),
-                    decoration: BoxDecoration(
-                      color: urgencyColor,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _getUrgencyLabel(lease['urgency']?.toString()),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 2.w),
-
-              // Tenant info
-              Row(
-                children: [
-                  Icon(Icons.person, size: 16, color: Colors.grey[600]),
-                  SizedBox(width: 1.w),
-                  Expanded(
-                    child: Text(
-                      lease['tenantName']?.toString() ?? 'N/A',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 1.w),
-
-              // Property info
-              Row(
-                children: [
-                  Icon(Icons.business, size: 16, color: Colors.grey[600]),
-                  SizedBox(width: 1.w),
-                  Text(
-                    'Local ${lease['propertyNumber'] ?? 'N/A'} • ${_getPropertyTypeLabel(lease['propertyType']?.toString())}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-              SizedBox(height: 1.w),
-
-              // Amount and status
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '${_formatAmount((lease['monthlyRent'] as num?)?.toDouble() ?? 0)} FCFA/mois',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).primaryColor,
-                    ),
-                  ),
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 2.w,
-                      vertical: 0.5.h,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _getStatusLabel(lease['status']?.toString()),
-                      style: const TextStyle(color: Colors.white, fontSize: 11),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 1.w),
-
-              // Dates
-              Text(
-                'Fin: ${_formatDate(lease['endDate']?.toString() ?? '')} • Prochain paiement: ${_formatDate(lease['nextPaymentDate']?.toString() ?? '')}',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Color _getUrgencyColor(String? urgency) {
-    switch (urgency) {
-      case 'high':
-        return Colors.red;
-      case 'medium':
-        return Colors.orange;
+  // Convertit le code d'étage vers le nom français
+  String _convertFloorToName(String floorCode) {
+    switch (floorCode) {
+      case 'rdc':
+        return 'Rez-de-chaussée';
+      case '1er':
+        return '1er étage';
+      case '2eme':
+        return '2ème étage';
+      case '3eme':
+        return '3ème étage';
       default:
-        return Colors.green;
+        return 'Rez-de-chaussée';
     }
   }
 
-  String _getUrgencyLabel(String? urgency) {
-    switch (urgency) {
-      case 'high':
-        return 'URGENT';
-      case 'medium':
-        return 'ATTENTION';
-      default:
-        return 'OK';
-    }
-  }
+  // Méthode _applyFilters pour filtrer localement
+  void _applyFilters() {
+    List<dynamic> filtered = List.from(_allBaux);
 
-  Color _getStatusColor(String? status) {
-    switch (status) {
-      case 'active':
-        return Colors.green;
-      case 'expiring':
-        return Colors.orange;
-      case 'expired':
-        return Colors.red;
-      default:
-        return Colors.grey;
+    // Filtre par statut
+    if (_currentFilter == 'Actif') {
+      filtered = filtered.where((b) => b['statut'] == 'Actif').toList();
+    } else if (_currentFilter == 'Expire bientôt') {
+      filtered =
+          filtered.where((b) => b['statut'] == 'Expire bientôt').toList();
+    } else if (_currentFilter == 'Expirés') {
+      filtered = filtered.where((b) => b['statut'] == 'Expiré').toList();
     }
+
+    // Filtre par recherche
+    if (_searchController.text.isNotEmpty) {
+      final searchTerm = _searchController.text.toLowerCase();
+      filtered = filtered.where((bail) {
+        final commercant = bail['commercants'];
+        final local = bail['locaux'];
+
+        final nomCommercant = commercant != null
+            ? (commercant['nom'] ?? '').toString().toLowerCase()
+            : '';
+        final numeroLocal = local != null
+            ? (local['numero'] ?? '').toString().toLowerCase()
+            : '';
+        final numeroContrat =
+            (bail['numero_contrat'] ?? '').toString().toLowerCase();
+
+        return nomCommercant.contains(searchTerm) ||
+            numeroLocal.contains(searchTerm) ||
+            numeroContrat.contains(searchTerm);
+      }).toList();
+    }
+
+    setState(() {
+      _baux = filtered;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Calcule les compteurs depuis _allBaux
+    final countTous = _allBaux.length;
+    final countActifs = _allBaux.where((b) => b['statut'] == 'Actif').length;
+    final countExpireBientot =
+        _allBaux.where((b) => b['statut'] == 'Expire bientôt').length;
+    final countExpires = _allBaux.where((b) => b['statut'] == 'Expiré').length;
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar:
-          _isSearchActive
-              ? AppBar(
-                backgroundColor: Colors.white,
-                elevation: 1,
-                leading: IconButton(
-                  onPressed: _toggleSearch,
-                  icon: const Icon(Icons.arrow_back, color: Colors.black87),
+      appBar: AppBar(title: Text('Baux')),
+      body: Column(
+        children: [
+          // Barre recherche
+          Padding(
+            padding: EdgeInsets.all(16),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Rechercher par commerçant, contrat...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) => _applyFilters(),
+            ),
+          ),
+
+          // Filtres
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                _FilterChip(
+                  label: 'Tous ($countTous)',
+                  isSelected: _currentFilter == 'Tous',
+                  onTap: () {
+                    setState(() => _currentFilter = 'Tous');
+                    _applyFilters();
+                  },
                 ),
-                title: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'Rechercher baux...',
-                    border: InputBorder.none,
-                  ),
-                  onChanged: _onSearchChanged,
+                SizedBox(width: 8),
+                _FilterChip(
+                  label: 'Actif ($countActifs)',
+                  isSelected: _currentFilter == 'Actif',
+                  onTap: () {
+                    setState(() => _currentFilter = 'Actif');
+                    _applyFilters();
+                  },
                 ),
-                actions: [
-                  if (_searchController.text.isNotEmpty)
-                    IconButton(
-                      onPressed: () {
-                        _searchController.clear();
-                        _onSearchChanged('');
-                      },
-                      icon: const Icon(Icons.clear, color: Colors.black87),
-                    ),
-                ],
-              )
-              : CustomAppBar(
-                title: 'Baux',
-                variant: CustomAppBarVariant.withActions,
-                onSearchPressed: _toggleSearch,
-              ),
-      drawer: Drawer(
-        backgroundColor: Colors.white,
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: Theme.of(context).primaryColor),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.business, color: Colors.white, size: 40),
-                  SizedBox(height: 1.h),
-                  Text(
-                    'Cocody Market Manager',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    'Gestion des baux',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
-                  ),
-                ],
+                SizedBox(width: 8),
+                _FilterChip(
+                  label: 'Expire bientôt ($countExpireBientot)',
+                  isSelected: _currentFilter == 'Expire bientôt',
+                  color: Colors.orange,
+                  onTap: () {
+                    setState(() => _currentFilter = 'Expire bientôt');
+                    _applyFilters();
+                  },
+                ),
+                SizedBox(width: 8),
+                _FilterChip(
+                  label: 'Expirés ($countExpires)',
+                  isSelected: _currentFilter == 'Expirés',
+                  color: Colors.red,
+                  onTap: () {
+                    setState(() => _currentFilter = 'Expirés');
+                    _applyFilters();
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          SizedBox(height: 16),
+
+          // Texte compteur
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '${_baux.length} bail${_baux.length > 1 ? "x" : ""} trouvé${_baux.length > 1 ? "s" : ""}',
+                style: TextStyle(color: Colors.grey),
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.dashboard),
-              title: const Text('Tableau de bord'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/dashboard-screen');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.business),
-              title: const Text('Locaux'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/properties-management-screen');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.store),
-              title: const Text('Commerçants'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/merchants-management-screen');
-              },
-            ),
-            ListTile(
-              leading: Icon(
-                Icons.description,
-                color: Theme.of(context).primaryColor,
-              ),
-              title: const Text('Baux'),
-              selected: true,
-              selectedTileColor: Theme.of(context).primaryColor.withAlpha(26),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.payment),
-              title: const Text('Paiements'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/payments-management-screen');
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Paramètres'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/settings-screen');
-              },
-            ),
-          ],
-        ),
+          ),
+
+          SizedBox(height: 8),
+
+          // Liste
+          Expanded(
+            child: _isLoading
+                ? Center(child: CircularProgressIndicator())
+                : _baux.isEmpty
+                    ? Center(child: Text('Aucun bail trouvé'))
+                    : RefreshIndicator(
+                        onRefresh: _loadBaux,
+                        child: ListView.builder(
+                          itemCount: _baux.length,
+                          itemBuilder: (context, index) {
+                            final bail = _baux[index];
+                            return _buildBailCard(bail);
+                          },
+                        ),
+                      ),
+          ),
+        ],
       ),
-      body:
-          _isLoading
-              ? _buildLoadingState()
-              : _error != null
-              ? _buildErrorState()
-              : RefreshIndicator(
-                onRefresh: _onRefresh,
-                color: Theme.of(context).primaryColor,
-                child: Column(
-                  children: [
-                    // Status filter chips
-                    _buildStatusFilterChips(),
-
-                    // Lease count
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 4.w,
-                        vertical: 1.h,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            '${_filteredLeases.length} bail${_filteredLeases.length > 1 ? 'aux' : ''} trouvé${_filteredLeases.length > 1 ? 's' : ''}',
-                            style: Theme.of(
-                              context,
-                            ).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          if (_selectedStatus != 'all' ||
-                              _searchQuery.isNotEmpty)
-                            TextButton(
-                              onPressed: () {
-                                setState(() {
-                                  _selectedStatus = 'all';
-                                  _searchQuery = '';
-                                  _searchController.clear();
-                                });
-                                _filterLeases();
-                              },
-                              child: const Text('Effacer filtres'),
-                            ),
-                        ],
-                      ),
-                    ),
-
-                    // Leases list
-                    Expanded(
-                      child:
-                          _filteredLeases.isEmpty
-                              ? Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.search_off,
-                                      color: Colors.grey[400],
-                                      size: 64,
-                                    ),
-                                    SizedBox(height: 2.h),
-                                    Text(
-                                      'Aucun bail trouvé',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(color: Colors.grey[600]),
-                                    ),
-                                    SizedBox(height: 1.h),
-                                    Text(
-                                      'Essayez de modifier vos filtres',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
-                                          ?.copyWith(color: Colors.grey[500]),
-                                    ),
-                                  ],
-                                ),
-                              )
-                              : ListView.builder(
-                                padding: EdgeInsets.only(bottom: 2.w),
-                                itemCount: _filteredLeases.length,
-                                itemBuilder: (context, index) {
-                                  final lease = _filteredLeases[index];
-                                  return _buildLeaseCard(lease);
-                                },
-                              ),
-                    ),
-                  ],
-                ),
-              ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          HapticFeedback.lightImpact();
+          // Navigation vers le formulaire de création de bail
+          print('🔵 Navigation vers nouveau bail');
           final result = await Navigator.pushNamed(
             context,
-            '/add-lease-form-screen',
+            AppRoutes.addLeaseFormScreen,
           );
 
-          // Si bail créé avec succès, recharge la liste
+          // Si un bail a été créé avec succès, recharge la liste
           if (result == true) {
-            await _loadLeases();
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Liste des baux mise à jour'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            }
+            print('✅ Bail créé, rechargement liste...');
+            _loadBaux();
           }
         },
+        child: Icon(Icons.add),
         backgroundColor: Theme.of(context).primaryColor,
-        child: const Icon(Icons.add, color: Colors.white),
+        tooltip: 'Ajouter un nouveau bail',
       ),
       bottomNavigationBar: const CustomBottomBar(
         currentIndex: 3,
         variant: CustomBottomBarVariant.standard,
+      ),
+    );
+  }
+
+  // Widget _buildBailCard avec navigation
+  Widget _buildBailCard(Map<String, dynamic> bail) {
+    // EXTRAIRE avec vérifications NULL
+    final commercant = bail['commercants'] as Map<String, dynamic>?;
+    final local = bail['locaux'] as Map<String, dynamic>?;
+    final typeLocal = local?['types_locaux'] as Map<String, dynamic>?;
+
+    final numeroContrat = bail['numero_contrat']?.toString() ?? 'N/A';
+    final nomCommercant =
+        commercant?['nom']?.toString() ?? 'Commerçant inconnu';
+    final numeroLocal = local?['numero']?.toString() ?? 'N/A';
+    final typeLocalNom = typeLocal?['nom']?.toString() ?? 'Type inconnu';
+    final montantLoyer = (bail['montant_loyer'] as num?)?.toDouble() ?? 0;
+    final dateFin = bail['date_fin']?.toString() ?? '';
+    final statut = bail['statut']?.toString() ?? 'Inconnu';
+
+    // Couleurs statut
+    Color statutColor = Colors.grey;
+    if (statut == 'Actif') statutColor = Colors.green;
+    if (statut == 'Expire bientôt') statutColor = Colors.orange;
+    if (statut == 'Expiré') statutColor = Colors.red;
+
+    return Card(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: Colors.blue.shade100,
+          child: Icon(Icons.person, color: Colors.blue),
+        ),
+        title: Text(
+          'Bail $numeroContrat',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.person, size: 14, color: Colors.grey),
+                SizedBox(width: 4),
+                Expanded(
+                  child: Text(nomCommercant, overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                Icon(Icons.store, size: 14, color: Colors.grey),
+                SizedBox(width: 4),
+                Text('Local $numeroLocal • $typeLocalNom'),
+              ],
+            ),
+            SizedBox(height: 4),
+            Text(
+              '${montantLoyer.toStringAsFixed(0)} FCFA/mois',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.green.shade700,
+                fontSize: 15,
+              ),
+            ),
+            if (dateFin.isNotEmpty)
+              Text(
+                'Fin: $dateFin',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
+          ],
+        ),
+        trailing: Container(
+          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: statutColor.withAlpha(51),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            statut,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: statutColor,
+            ),
+          ),
+        ),
+        onTap: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => LeaseDetailsScreen(leaseId: bail['id']),
+            ),
+          );
+
+          if (result == true) {
+            _loadBaux(); // Recharge si modifié
+          }
+        },
+      ),
+    );
+  }
+}
+
+// Widget _FilterChip
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final Color? color;
+
+  const _FilterChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final chipColor = color ?? Colors.blue;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? chipColor : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: isSelected ? Colors.white : Colors.grey.shade700,
+          ),
+        ),
       ),
     );
   }

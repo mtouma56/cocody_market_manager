@@ -10,7 +10,9 @@ class MerchantsService {
   /// Récupère tous les commerçants avec leurs informations de bail
   Future<List<Map<String, dynamic>>> getAllMerchants() async {
     try {
-      final response = await _supabase.from('commercants').select('''
+      final response = await _supabase
+          .from('commercants')
+          .select('''
         id,
         nom,
         activite,
@@ -32,7 +34,9 @@ class MerchantsService {
             types_locaux!inner(nom)
           )
         )
-      ''').eq('actif', true).order('nom');
+      ''')
+          .eq('actif', true)
+          .order('nom');
 
       List<Map<String, dynamic>> merchants = [];
 
@@ -68,7 +72,8 @@ class MerchantsService {
           'email': commercant['email'] ?? '',
           'address': 'Cocody, Abidjan', // Address par défaut
           'status': status,
-          'profilePhoto': commercant['photo_url'] ??
+          'profilePhoto':
+              commercant['photo_url'] ??
               'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=400',
           'profilePhotoSemanticLabel':
               'Portrait professionnel de ${commercant['nom']}, commerçant au Marché Cocody',
@@ -130,11 +135,12 @@ class MerchantsService {
         insertData['photo_url'] = merchantData['profilePhoto'];
       }
 
-      final response = await _supabase
-          .from('commercants')
-          .insert(insertData)
-          .select()
-          .single();
+      final response =
+          await _supabase
+              .from('commercants')
+              .insert(insertData)
+              .select()
+              .single();
 
       print('✅ Nouveau commerçant créé: ${response['nom']}');
       return response;
@@ -154,26 +160,35 @@ class MerchantsService {
     }
   }
 
-  /// Met à jour les informations d'un commerçant
-  Future<void> updateMerchant(
-    String merchantId,
-    Map<String, dynamic> updates,
-  ) async {
+  /// Met à jour un commerçant
+  Future<Map<String, dynamic>> updateCommercant({
+    required String commercantId,
+    required String nom,
+    required String activite,
+    required String contact,
+    String? email,
+    String? photoUrl,
+  }) async {
     try {
-      await _supabase.from('commercants').update({
-        if (updates['name'] != null) 'nom': updates['name'],
-        if (updates['businessType'] != null)
-          'activite': updates['businessType'],
-        if (updates['phone'] != null) 'contact': updates['phone'],
-        if (updates['email'] != null) 'email': updates['email'],
-        if (updates['profilePhoto'] != null)
-          'photo_url': updates['profilePhoto'],
-      }).eq('id', merchantId);
+      final response =
+          await _supabase
+              .from('commercants')
+              .update({
+                'nom': nom,
+                'activite': activite,
+                'contact': contact,
+                'email': email,
+                'photo_url': photoUrl,
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', commercantId)
+              .select()
+              .single();
 
-      print('✅ Commerçant $merchantId mis à jour');
-    } catch (error) {
-      print('❌ ERREUR updateMerchant: $error');
-      throw Exception('Erreur lors de la mise à jour: $error');
+      return response;
+    } catch (e) {
+      print('❌ ERREUR updateCommercant: $e');
+      rethrow;
     }
   }
 
@@ -182,7 +197,8 @@ class MerchantsService {
     try {
       await _supabase
           .from('commercants')
-          .update({'actif': false}).eq('id', merchantId);
+          .update({'actif': false})
+          .eq('id', merchantId);
       print('✅ Commerçant $merchantId désactivé');
     } catch (error) {
       print('❌ ERREUR removeMerchant: $error');
@@ -268,11 +284,12 @@ class MerchantsService {
   Future<Map<String, dynamic>> getCommercantDetails(String commercantId) async {
     try {
       // Infos commerçant
-      final commercant = await _supabase
-          .from('commercants')
-          .select()
-          .eq('id', commercantId)
-          .single();
+      final commercant =
+          await _supabase
+              .from('commercants')
+              .select()
+              .eq('id', commercantId)
+              .single();
 
       // Ses baux (actifs et passés)
       final baux = await _supabase
@@ -298,17 +315,19 @@ class MerchantsService {
           .order('date_paiement', ascending: false);
 
       // Calcule statistiques
-      final totalPaye =
-          paiements.where((p) => p['statut'] == 'Payé').fold<double>(
-                0,
-                (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
-              );
+      final totalPaye = paiements
+          .where((p) => p['statut'] == 'Payé')
+          .fold<double>(
+            0,
+            (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
+          );
 
-      final enRetard =
-          paiements.where((p) => p['statut'] == 'En retard').fold<double>(
-                0,
-                (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
-              );
+      final enRetard = paiements
+          .where((p) => p['statut'] == 'En retard')
+          .fold<double>(
+            0,
+            (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
+          );
 
       final bauxActifs = baux.where((b) => b['statut'] == 'Actif').length;
 
@@ -337,42 +356,49 @@ class MerchantsService {
       }
 
       // Recherche dans commercants ET dans locaux via baux
-      final commercants = await _supabase.from('commercants').select('''
+      final commercants = await _supabase
+          .from('commercants')
+          .select('''
         *,
         baux!left(
           *,
           locaux!inner(*)
         )
-      ''').order('nom');
+      ''')
+          .order('nom');
 
       // Filtre par nom, activité, contact OU numéro de local
-      final filtered = commercants.where((c) {
-        final nom = (c['nom'] as String? ?? '').toLowerCase();
-        final activite = (c['activite'] as String? ?? '').toLowerCase();
-        final contact = (c['contact'] as String? ?? '').toLowerCase();
-        final q = query.toLowerCase();
+      final filtered =
+          commercants.where((c) {
+            final nom = (c['nom'] as String? ?? '').toLowerCase();
+            final activite = (c['activite'] as String? ?? '').toLowerCase();
+            final contact = (c['contact'] as String? ?? '').toLowerCase();
+            final q = query.toLowerCase();
 
-        // Recherche dans nom/activite/contact
-        if (nom.contains(q) || activite.contains(q) || contact.contains(q)) {
-          return true;
-        }
+            // Recherche dans nom/activite/contact
+            if (nom.contains(q) ||
+                activite.contains(q) ||
+                contact.contains(q)) {
+              return true;
+            }
 
-        // Recherche dans numéros de locaux
-        final baux = c['baux'] as List?;
-        if (baux != null) {
-          for (var bail in baux) {
-            final local = bail?['locaux'];
-            if (local != null) {
-              final numero = (local['numero'] as String? ?? '').toLowerCase();
-              if (numero.contains(q)) {
-                return true;
+            // Recherche dans numéros de locaux
+            final baux = c['baux'] as List?;
+            if (baux != null) {
+              for (var bail in baux) {
+                final local = bail?['locaux'];
+                if (local != null) {
+                  final numero =
+                      (local['numero'] as String? ?? '').toLowerCase();
+                  if (numero.contains(q)) {
+                    return true;
+                  }
+                }
               }
             }
-          }
-        }
 
-        return false;
-      }).toList();
+            return false;
+          }).toList();
 
       print('🔍 Recherche "$query": ${filtered.length} résultats');
 
@@ -413,7 +439,8 @@ class MerchantsService {
           'email': commercant['email'] ?? '',
           'address': 'Cocody, Abidjan', // Address par défaut
           'status': status,
-          'profilePhoto': commercant['photo_url'] ??
+          'profilePhoto':
+              commercant['photo_url'] ??
               'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=400',
           'profilePhotoSemanticLabel':
               'Portrait professionnel de ${commercant['nom'] ?? 'Commerçant'}, commerçant au Marché Cocody',
