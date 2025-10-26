@@ -185,7 +185,17 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
         _allPaiements.where((p) => p['statut'] == 'Partiel').length;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Paiements')),
+      appBar: AppBar(
+        title: Text('Paiements'),
+        actions: [
+          // NOUVEAU BOUTON - Génération automatique des paiements
+          IconButton(
+            icon: const Icon(Icons.auto_fix_high),
+            tooltip: 'Générer paiements du mois',
+            onPressed: _genererPaiementsMois,
+          ),
+        ],
+      ),
       body: Column(
         children: [
           // Barre recherche
@@ -471,6 +481,102 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
         },
       ),
     );
+  }
+
+  // NOUVELLE MÉTHODE - Génération des paiements du mois avec confirmation
+  Future<void> _genererPaiementsMois() async {
+    // Confirmer avec l'utilisateur
+    final confirme = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Générer paiements'),
+        content: Text(
+            'Génération des paiements pour les baux actifs uniquement.\n\n'
+            'Les locaux sans bail ou avec bail résilié/expiré ne seront pas inclus.\n\n'
+            'Continuer ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Générer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirme != true) return;
+
+    try {
+      // Afficher loader
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      // Mois actuel
+      final now = DateTime.now();
+      final moisConcerne =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}';
+
+      // Générer
+      final paiements = await _service.genererPaiementsMois(moisConcerne);
+
+      // Fermer loader
+      Navigator.pop(context);
+
+      // Afficher résultat
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green),
+              SizedBox(width: 8),
+              Text('Génération terminée'),
+            ],
+          ),
+          content: Text('${paiements.length} paiements générés\n'
+              'pour les baux actifs uniquement.'),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK'),
+            ),
+          ],
+        ),
+      );
+
+      // Recharger données
+      _loadPaiements();
+    } catch (e) {
+      Navigator.pop(context); // Fermer loader
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.error, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Erreur'),
+            ],
+          ),
+          content: Text('Erreur génération : $e'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 }
 

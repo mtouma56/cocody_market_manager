@@ -81,9 +81,17 @@ class _PropertyDetailsScreenState extends State<PropertyDetailsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
-            onPressed: () {
-              // TODO: Modifier local
-              print('Modifier local $numero');
+            onPressed: () async {
+              final result = await Navigator.pushNamed(
+                context,
+                AppRoutes.editPropertyScreen,
+                arguments: widget.propertyId,
+              );
+
+              // Reload data if property was updated
+              if (result == true) {
+                _loadData();
+              }
             },
           ),
         ],

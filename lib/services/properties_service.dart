@@ -21,24 +21,19 @@ class PropertiesService {
       );
 
       // INSERT dans Supabase
-      final response =
-          await _supabase
-              .from('locaux')
-              .insert({
-                'numero': numero,
-                'type_id': typeId,
-                'etage_id': etageId,
-                'statut': statut,
-                'actif': actif,
-                'created_at': DateTime.now().toIso8601String(),
-                'updated_at': DateTime.now().toIso8601String(),
-              })
-              .select('''
+      final response = await _supabase.from('locaux').insert({
+        'numero': numero,
+        'type_id': typeId,
+        'etage_id': etageId,
+        'statut': statut,
+        'actif': actif,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }).select('''
             *,
             types_locaux(*),
             etages(*)
-          ''')
-              .single();
+          ''').single();
 
       print('✅ Local créé avec succès: ${response['numero']}');
 
@@ -50,7 +45,7 @@ class PropertiesService {
     }
   }
 
-  /// Met à jour un local existant
+  /// Met à jour un local existant avec validation de statut
   Future<Map<String, dynamic>> updateLocal({
     required String id,
     String? numero,
@@ -61,6 +56,25 @@ class PropertiesService {
   }) async {
     try {
       print('🔄 Mise à jour local: id=$id');
+
+      // Vérifier la cohérence du statut avant mise à jour
+      if (statut != null) {
+        final hasActiveLease = await _checkActiveLease(id);
+
+        if (hasActiveLease && statut == 'Disponible') {
+          throw Exception(
+            'Impossible de marquer ce local comme disponible car il a un bail actif. '
+            'Résiliez d\'abord le bail.',
+          );
+        }
+
+        if (!hasActiveLease && statut == 'Occupé') {
+          throw Exception(
+            'Impossible de marquer ce local comme occupé car il n\'a pas de bail actif. '
+            'Créez d\'abord un bail.',
+          );
+        }
+      }
 
       final data = <String, dynamic>{
         'updated_at': DateTime.now().toIso8601String(),
@@ -86,6 +100,23 @@ class PropertiesService {
       print('❌ ERREUR updateLocal: $e');
       print('Stack trace: $stackTrace');
       rethrow;
+    }
+  }
+
+  /// Vérifie si un local a un bail actif
+  Future<bool> _checkActiveLease(String localId) async {
+    try {
+      final result = await _supabase
+          .from('baux')
+          .select('id')
+          .eq('local_id', localId)
+          .eq('statut', 'Actif')
+          .limit(1);
+
+      return result.isNotEmpty;
+    } catch (e) {
+      print('❌ Erreur vérification bail actif: $e');
+      return false; // En cas d'erreur, on assume qu'il n'y a pas de bail actif
     }
   }
 
@@ -143,9 +174,7 @@ class PropertiesService {
     bool ascending = true,
   }) async {
     try {
-      var query = _supabase
-          .from('locaux')
-          .select('''
+      var query = _supabase.from('locaux').select('''
         id,
         numero,
         statut,
@@ -157,16 +186,14 @@ class PropertiesService {
           statut,
           commercants!inner(nom, activite, contact)
         )
-      ''')
-          .eq('actif', true);
+      ''').eq('actif', true);
 
       // Apply status filters if provided
       if (statusFilters != null && statusFilters.isNotEmpty) {
         if (!statusFilters.contains('all')) {
-          final supabaseStatuses =
-              statusFilters
-                  .map((status) => _getSupabaseStatusFromFilter(status))
-                  .toList();
+          final supabaseStatuses = statusFilters
+              .map((status) => _getSupabaseStatusFromFilter(status))
+              .toList();
           query = query.inFilter('statut', supabaseStatuses);
         }
       }
@@ -269,9 +296,7 @@ class PropertiesService {
     try {
       int ordre = _getFloorOrder(floorCode);
 
-      var query = _supabase
-          .from('locaux')
-          .select('''
+      var query = _supabase.from('locaux').select('''
         id,
         numero,
         statut,
@@ -283,17 +308,14 @@ class PropertiesService {
           statut,
           commercants!inner(nom, activite, contact)
         )
-      ''')
-          .eq('actif', true)
-          .eq('etages.ordre', ordre);
+      ''').eq('actif', true).eq('etages.ordre', ordre);
 
       // Apply status filters if provided
       if (statusFilters != null && statusFilters.isNotEmpty) {
         if (!statusFilters.contains('all')) {
-          final supabaseStatuses =
-              statusFilters
-                  .map((status) => _getSupabaseStatusFromFilter(status))
-                  .toList();
+          final supabaseStatuses = statusFilters
+              .map((status) => _getSupabaseStatusFromFilter(status))
+              .toList();
           query = query.inFilter('statut', supabaseStatuses);
         }
       }
@@ -386,8 +408,7 @@ class PropertiesService {
 
       await _supabase
           .from('locaux')
-          .update({'statut': supabaseStatus})
-          .eq('id', propertyId);
+          .update({'statut': supabaseStatus}).eq('id', propertyId);
 
       print('✅ Statut du local $propertyId mis à jour vers $supabaseStatus');
     } catch (error) {
@@ -507,10 +528,7 @@ class PropertiesService {
       print('🔍 Récupération détails local: id=$localId');
 
       // Récupère les informations du local avec toutes les relations
-      final local =
-          await _supabase
-              .from('locaux')
-              .select('''
+      final local = await _supabase.from('locaux').select('''
             *,
             types_locaux(*),
             etages(*),
@@ -518,9 +536,21 @@ class PropertiesService {
               *,
               commercants(*)
             )
-          ''')
-              .eq('id', localId)
-              .single();
+          ''').eq('id', localId).single();
+
+      // Détermine le statut réel basé sur les baux actifs
+      String statutReel = _determineRealStatus(local);
+
+      // Met à jour le statut en base si nécessaire
+      if (local['statut'] != statutReel) {
+        await _supabase
+            .from('locaux')
+            .update({'statut': statutReel}).eq('id', localId);
+
+        // Met à jour les données locales
+        local['statut'] = statutReel;
+        print('✅ Statut corrigé: ${local['numero']} → $statutReel');
+      }
 
       // Récupère l'historique des paiements pour ce local
       final paiements = await _supabase
@@ -539,21 +569,19 @@ class PropertiesService {
       final totalPaiements = paiements.length;
       final paiementsPayes =
           paiements.where((p) => p['statut'] == 'Payé').length;
-      final montantTotal = paiements
-          .where((p) => p['statut'] == 'Payé')
-          .fold<double>(
-            0,
-            (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
-          );
+      final montantTotal =
+          paiements.where((p) => p['statut'] == 'Payé').fold<double>(
+                0,
+                (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
+              );
 
       final paiementsEnRetard =
           paiements.where((p) => p['statut'] == 'En retard').length;
-      final montantEnRetard = paiements
-          .where((p) => p['statut'] == 'En retard')
-          .fold<double>(
-            0,
-            (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
-          );
+      final montantEnRetard =
+          paiements.where((p) => p['statut'] == 'En retard').fold<double>(
+                0,
+                (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
+              );
 
       // Récupère le bail actif s'il existe
       final bailActif = (local['baux'] as List?)?.firstWhere(
@@ -573,10 +601,9 @@ class PropertiesService {
           'montant_total': montantTotal,
           'paiements_en_retard': paiementsEnRetard,
           'montant_en_retard': montantEnRetard,
-          'taux_paiement':
-              totalPaiements > 0
-                  ? (paiementsPayes / totalPaiements * 100)
-                  : 0.0,
+          'taux_paiement': totalPaiements > 0
+              ? (paiementsPayes / totalPaiements * 100)
+              : 0.0,
         },
       };
     } catch (e, stackTrace) {
@@ -584,6 +611,28 @@ class PropertiesService {
       print('Stack trace: $stackTrace');
       rethrow;
     }
+  }
+
+  /// Détermine le statut réel d'un local basé sur ses baux
+  String _determineRealStatus(Map<String, dynamic> local) {
+    final baux = local['baux'] as List?;
+
+    if (baux == null || baux.isEmpty) {
+      return 'Disponible'; // Pas de bail = disponible
+    }
+
+    // Cherche un bail actif
+    final bailActif = baux.firstWhere(
+      (b) => b['statut'] == 'Actif',
+      orElse: () => null,
+    );
+
+    if (bailActif != null) {
+      return 'Occupé'; // Bail actif = occupé
+    }
+
+    // Pas de bail actif = disponible
+    return 'Disponible';
   }
 
   /// Extrait le numéro d'un identifiant de local pour le tri naturel

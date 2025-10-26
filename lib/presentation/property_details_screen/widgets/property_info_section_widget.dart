@@ -19,6 +19,11 @@ class PropertyInfoSectionWidget extends StatelessWidget {
     final surface = local['types_locaux']?['surface_m2'] ?? 0;
     final statut = local['statut'] ?? '';
 
+    // Détermine le statut réel basé sur la présence d'un bail actif
+    final statutReel = bailActif != null ? 'Occupé' : 'Disponible';
+    final statutAffiche =
+        statutReel; // Utilise le statut réel au lieu du statut en base
+
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 4.w),
       child: Column(
@@ -31,12 +36,66 @@ class PropertyInfoSectionWidget extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Informations générales',
-                    style: TextStyle(
-                      fontSize: 16.sp,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        'Informations générales',
+                        style: TextStyle(
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Spacer(),
+                      if (bailActif != null)
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 2.w, vertical: 1.w),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withAlpha(51),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.lock, size: 3.w, color: Colors.green),
+                              SizedBox(width: 1.w),
+                              Text(
+                                'Bail actif',
+                                style: TextStyle(
+                                  fontSize: 10.sp,
+                                  color: Colors.green.shade700,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 2.w, vertical: 1.w),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withAlpha(51),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.lock_open,
+                                  size: 3.w, color: Colors.blue),
+                              SizedBox(width: 1.w),
+                              Text(
+                                'Libre',
+                                style: TextStyle(
+                                  fontSize: 10.sp,
+                                  color: Colors.blue.shade700,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
                   SizedBox(height: 3.w),
                   _InfoRow(
@@ -62,8 +121,8 @@ class PropertyInfoSectionWidget extends StatelessWidget {
                   _InfoRow(
                     icon: Icons.info,
                     label: 'Statut',
-                    value: statut,
-                    valueColor: _getStatusColor(statut),
+                    value: statutAffiche,
+                    valueColor: _getStatusColor(statutAffiche),
                   ),
                 ],
               ),

@@ -6,6 +6,7 @@ import '../presentation/merchants_management_screen/merchants_management_screen.
 import '../presentation/merchant_details_screen/merchant_details_screen.dart';
 import '../presentation/properties_management_screen/properties_management_screen.dart';
 import '../presentation/property_details_screen/property_details_screen.dart';
+import '../presentation/edit_property_screen/edit_property_screen.dart';
 import '../presentation/lease_management_screen/lease_management_screen.dart';
 import '../presentation/lease_details_screen/lease_details_screen.dart';
 import '../presentation/add_lease_form_screen/add_lease_form_screen.dart';
@@ -28,6 +29,7 @@ class AppRoutes {
   static const String propertiesManagementScreen =
       '/properties-management-screen';
   static const String propertyDetailsScreen = '/property-details-screen';
+  static const String editPropertyScreen = '/edit-property-screen';
   static const String leaseManagementScreen = '/lease-management-screen';
   static const String leaseDetailsScreen = '/lease-details-screen';
   static const String addLeaseFormScreen = '/add-lease-form-screen';
@@ -55,6 +57,11 @@ class AppRoutes {
       final propertyId =
           ModalRoute.of(context)!.settings.arguments as String? ?? '';
       return PropertyDetailsScreen(propertyId: propertyId);
+    },
+    editPropertyScreen: (context) {
+      final propertyId =
+          ModalRoute.of(context)!.settings.arguments as String? ?? '';
+      return EditPropertyScreen(propertyId: propertyId);
     },
     leaseManagementScreen: (context) => const LeaseManagementScreen(),
     leaseDetailsScreen: (context) {
