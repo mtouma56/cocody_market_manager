@@ -4,8 +4,11 @@ import 'package:sizer/sizer.dart';
 
 import '../core/app_export.dart';
 import '../widgets/custom_error_widget.dart';
+import './services/cache_service.dart';
+import './services/connectivity_service.dart';
 import './services/notification_service.dart';
 import './services/supabase_service.dart';
+import './services/sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +19,42 @@ void main() async {
     debugPrint('✅ Supabase initialized successfully');
   } catch (e) {
     debugPrint('❌ Failed to initialize Supabase: $e');
+  }
+
+  // Initialiser cache local
+  try {
+    await CacheService().initialize();
+    debugPrint('✅ Cache local initialized successfully');
+  } catch (e) {
+    debugPrint('❌ Failed to initialize cache: $e');
+  }
+
+  // Initialiser connectivité
+  try {
+    await ConnectivityService().initialize();
+    debugPrint('✅ Connectivity service initialized successfully');
+  } catch (e) {
+    debugPrint('❌ Failed to initialize connectivity: $e');
+  }
+
+  // Initialiser synchronisation
+  try {
+    SyncService().initialize();
+    debugPrint('✅ Sync service initialized successfully');
+  } catch (e) {
+    debugPrint('❌ Failed to initialize sync service: $e');
+  }
+
+  // Sync initiale si en ligne
+  try {
+    if (ConnectivityService().isOnline) {
+      SyncService().syncAll();
+      debugPrint('✅ Initial sync started');
+    } else {
+      debugPrint('📡 Starting in offline mode');
+    }
+  } catch (e) {
+    debugPrint('❌ Failed initial sync: $e');
   }
 
   // Initialiser notifications (Android + iOS)

@@ -19,6 +19,9 @@ import '../presentation/reports_screen/reports_screen.dart';
 import '../presentation/settings_screen/settings_screen.dart';
 import '../presentation/overdue_payments_screen/overdue_payments_screen.dart';
 import '../presentation/expiring_leases_screen/expiring_leases_screen.dart';
+import '../presentation/statistics_service_integration_screen/statistics_service_integration_screen.dart';
+import '../presentation/statistics_screen/statistics_screen.dart';
+import '../presentation/documents_screen/documents_screen.dart';
 
 class AppRoutes {
   static const String splashScreen = '/';
@@ -45,6 +48,10 @@ class AppRoutes {
   static const String settingsScreen = '/settings-screen';
   static const String overduePaymentsScreen = '/overdue-payments-screen';
   static const String expiringLeasesScreen = '/expiring-leases-screen';
+  static const String statisticsServiceIntegrationScreen =
+      '/statistics-service-integration-screen';
+  static const String statisticsScreen = '/statistics-screen';
+  static const String documentsScreen = '/documents-screen';
 
   static Map<String, WidgetBuilder> routes = {
     splashScreen: (context) => const SplashScreen(),
@@ -92,5 +99,9 @@ class AppRoutes {
     settingsScreen: (context) => const SettingsScreen(),
     overduePaymentsScreen: (context) => const OverduePaymentsScreen(),
     expiringLeasesScreen: (context) => const ExpiringLeasesScreen(),
+    statisticsServiceIntegrationScreen: (context) =>
+        const StatisticsServiceIntegrationScreen(),
+    statisticsScreen: (context) => const StatisticsScreen(),
+    documentsScreen: (context) => const DocumentsScreen(),
   };
 }

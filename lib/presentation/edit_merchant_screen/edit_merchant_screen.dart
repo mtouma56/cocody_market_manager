@@ -20,6 +20,7 @@ class _EditMerchantScreenState extends State<EditMerchantScreen> {
   late TextEditingController _emailController;
 
   bool _isSaving = false;
+  bool _isUploadingPhoto = false;
   String? _photoUrl;
 
   @override
@@ -51,6 +52,188 @@ class _EditMerchantScreenState extends State<EditMerchantScreen> {
     super.dispose();
   }
 
+  Future<void> _showPhotoUploadOptions() async {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Changer la photo de profil',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildPhotoOption(
+                  icon: Icons.photo_library,
+                  label: 'Galerie',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _uploadFromGallery();
+                  },
+                ),
+                _buildPhotoOption(
+                  icon: Icons.camera_alt,
+                  label: 'Caméra',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _uploadFromCamera();
+                  },
+                ),
+                if (_photoUrl != null)
+                  _buildPhotoOption(
+                    icon: Icons.delete,
+                    label: 'Supprimer',
+                    color: Colors.red,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _removePhoto();
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhotoOption({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color? color,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: (color ?? Colors.blue).withAlpha(26),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              icon,
+              size: 32,
+              color: color ?? Colors.blue,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: color ?? Colors.grey.shade700,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _uploadFromGallery() async {
+    setState(() => _isUploadingPhoto = true);
+
+    try {
+      final result =
+          await _service.pickAndUploadFromGallery(widget.commercant['id']);
+
+      if (result != null && result['success'] == true) {
+        setState(() {
+          _photoUrl = result['photo_url'];
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Photo mise à jour avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        _showError(result?['error'] ?? 'Erreur lors de l\'upload');
+      }
+    } catch (e) {
+      _showError('Erreur: $e');
+    } finally {
+      setState(() => _isUploadingPhoto = false);
+    }
+  }
+
+  Future<void> _uploadFromCamera() async {
+    setState(() => _isUploadingPhoto = true);
+
+    try {
+      final result =
+          await _service.pickAndUploadFromCamera(widget.commercant['id']);
+
+      if (result != null && result['success'] == true) {
+        setState(() {
+          _photoUrl = result['photo_url'];
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Photo prise et mise à jour avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        _showError(result?['error'] ?? 'Erreur lors de la prise de photo');
+      }
+    } catch (e) {
+      _showError('Erreur: $e');
+    } finally {
+      setState(() => _isUploadingPhoto = false);
+    }
+  }
+
+  void _removePhoto() {
+    setState(() {
+      _photoUrl = null;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Photo supprimée (sera appliquée lors de la sauvegarde)'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
   Future<void> _saveCommercant() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -62,10 +245,9 @@ class _EditMerchantScreenState extends State<EditMerchantScreen> {
         nom: _nomController.text.trim(),
         activite: _activiteController.text.trim(),
         contact: _contactController.text.trim(),
-        email:
-            _emailController.text.trim().isNotEmpty
-                ? _emailController.text.trim()
-                : null,
+        email: _emailController.text.trim().isNotEmpty
+            ? _emailController.text.trim()
+            : null,
         photoUrl: _photoUrl,
       );
 
@@ -106,20 +288,34 @@ class _EditMerchantScreenState extends State<EditMerchantScreen> {
                       backgroundColor: Colors.blue.shade100,
                       backgroundImage:
                           _photoUrl != null ? NetworkImage(_photoUrl!) : null,
-                      child:
-                          _photoUrl == null
-                              ? Text(
-                                _nomController.text.isNotEmpty
-                                    ? _nomController.text[0].toUpperCase()
-                                    : '?',
-                                style: TextStyle(
-                                  fontSize: 40,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue.shade700,
-                                ),
-                              )
-                              : null,
+                      child: _photoUrl == null
+                          ? Text(
+                              _nomController.text.isNotEmpty
+                                  ? _nomController.text[0].toUpperCase()
+                                  : '?',
+                              style: TextStyle(
+                                fontSize: 40,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue.shade700,
+                              ),
+                            )
+                          : null,
                     ),
+                    if (_isUploadingPhoto)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withAlpha(128),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        ),
+                      ),
                     Positioned(
                       bottom: 0,
                       right: 0,
@@ -133,17 +329,9 @@ class _EditMerchantScreenState extends State<EditMerchantScreen> {
                             color: Colors.white,
                           ),
                           padding: EdgeInsets.zero,
-                          onPressed: () {
-                            // TODO: Upload photo
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Fonction upload photo à implémenter',
-                                ),
-                                backgroundColor: Colors.orange,
-                              ),
-                            );
-                          },
+                          onPressed: _isUploadingPhoto
+                              ? null
+                              : _showPhotoUploadOptions,
                         ),
                       ),
                     ),
@@ -173,9 +361,8 @@ class _EditMerchantScreenState extends State<EditMerchantScreen> {
                     return 'Nom trop court (min 3 caractères)';
                   return null;
                 },
-                onChanged:
-                    (value) =>
-                        setState(() {}), // Refresh pour mettre à jour l'avatar
+                onChanged: (value) =>
+                    setState(() {}), // Refresh pour mettre à jour l'avatar
               ),
 
               const SizedBox(height: 16),
@@ -261,31 +448,30 @@ class _EditMerchantScreenState extends State<EditMerchantScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child:
-                      _isSaving
-                          ? const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
+                  child: _isSaving
+                      ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
                               ),
-                              SizedBox(width: 12),
-                              Text('Enregistrement...'),
-                            ],
-                          )
-                          : const Text(
-                            'Enregistrer les modifications',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
                             ),
+                            SizedBox(width: 12),
+                            Text('Enregistrement...'),
+                          ],
+                        )
+                      : const Text(
+                          'Enregistrer les modifications',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
+                        ),
                 ),
               ),
             ],

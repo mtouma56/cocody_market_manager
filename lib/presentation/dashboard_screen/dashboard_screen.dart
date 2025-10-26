@@ -5,14 +5,19 @@ import 'package:percent_indicator/percent_indicator.dart';
 import 'package:sizer/sizer.dart';
 
 import '../../models/dashboard_stats.dart';
+import '../../routes/app_routes.dart';
 import '../../services/bail_validation_service.dart';
+import '../../services/cache_service.dart';
+import '../../services/connectivity_service.dart';
 import '../../services/dashboard_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/paiements_service.dart';
 import '../../services/rapport_service.dart';
+import '../../services/sync_service.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/custom_bottom_bar.dart';
 import '../../widgets/notification_badge.dart';
+import '../documents_screen/documents_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -28,6 +33,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final RapportService _rapportService = RapportService();
   final _validationService = BailValidationService();
 
+  // Nouveaux services pour mode hors ligne
+  final _connectivity = ConnectivityService();
+  final _cache = CacheService();
+  final _sync = SyncService();
+
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -41,8 +51,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _initializeOfflineMode();
     _loadData();
     _verifierConflits(); // Vérification au démarrage
+  }
+
+  /// Initialise le mode hors ligne
+  Future<void> _initializeOfflineMode() async {
+    try {
+      // Initialiser le cache
+      await _cache.initialize();
+
+      // Initialiser la connectivité
+      await _connectivity.initialize();
+
+      // Initialiser la synchronisation
+      _sync.initialize();
+
+      // Sync initiale si en ligne
+      if (_connectivity.isOnline) {
+        _sync.syncAll();
+      }
+
+      print('✅ Mode hors ligne initialisé');
+    } catch (e) {
+      print('❌ Erreur initialisation mode hors ligne: $e');
+    }
   }
 
   Future<void> _verifierConflits() async {
@@ -272,17 +306,113 @@ class _DashboardScreenState extends State<DashboardScreen> {
             tooltip: 'Générer paiements du mois',
             onPressed: _genererPaiementsMois,
           ),
+          // NOUVEAU BOUTON - Synchronisation manuelle
+          IconButton(
+            icon: const Icon(Icons.sync, color: Colors.white),
+            tooltip: 'Synchroniser manuellement',
+            onPressed: _syncManuelle,
+          ),
         ],
       ),
-      drawer: _buildDrawer(context),
-      body: RefreshIndicator(
-        onRefresh: _loadData,
-        child: _isLoading
-            ? _buildLoadingState()
-            : _errorMessage != null
-                ? _buildErrorState()
-                : _buildDashboardContent(),
-      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // PARTIE 1 - 4 WIDGETS PRINCIPAUX (Grid 2x2)
+                  _buildMainWidgets(),
+                  SizedBox(height: 6.w),
+
+                  const SizedBox(height: 24),
+
+                  // Quick Actions Section
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Actions rapides',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => _showQuickActionsBottomSheet(context),
+                        child: const Text('Voir tout'),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Quick Actions Grid
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.1,
+                    children: [
+                      _buildQuickActionCard(
+                        icon: Icons.person_add,
+                        label: 'Nouveau\nCommerçant',
+                        color: Colors.blue,
+                        onTap: () => Navigator.pushNamed(
+                            context, AppRoutes.merchantsManagementScreen),
+                      ),
+                      _buildQuickActionCard(
+                        icon: Icons.receipt_long,
+                        label: 'Nouveau\nPaiement',
+                        color: Colors.green,
+                        onTap: () => Navigator.pushNamed(
+                            context, AppRoutes.addPaymentFormScreen),
+                      ),
+                      _buildQuickActionCard(
+                        icon: Icons.folder,
+                        label: 'Documents',
+                        color: Colors.orange,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => const DocumentsScreen()),
+                        ),
+                      ),
+                      _buildQuickActionCard(
+                        icon: Icons.assignment,
+                        label: 'Nouveau\nBail',
+                        color: Colors.purple,
+                        onTap: () => Navigator.pushNamed(
+                            context, AppRoutes.addLeaseFormScreen),
+                      ),
+                      _buildQuickActionCard(
+                        icon: Icons.analytics,
+                        label: 'Statistiques',
+                        color: Colors.indigo,
+                        onTap: () => Navigator.pushNamed(
+                            context, AppRoutes.statisticsScreen),
+                      ),
+                      _buildQuickActionCard(
+                        icon: Icons.description,
+                        label: 'Rapports',
+                        color: Colors.teal,
+                        onTap: () => Navigator.pushNamed(
+                            context, AppRoutes.reportsScreen),
+                      ),
+                    ],
+                  ),
+
+                  // PARTIE 2 - 3 GRAPHIQUES
+                  _buildChartsSection(),
+                  SizedBox(height: 6.w),
+
+                  // PARTIE 3 - APERÇU DÉTAILLÉ DES ÉTAGES
+                  _buildFloorDetailsSection(),
+                ],
+              ),
+            ),
       bottomNavigationBar: const CustomBottomBar(
         currentIndex: 0,
         variant: CustomBottomBarVariant.standard,
@@ -290,8 +420,112 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // NOUVELLE MÉTHODE - Génération des paiements du mois avec confirmation
+  Widget _buildQuickActionCard({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withAlpha(26),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// NOUVELLE MÉTHODE - Synchronisation manuelle
+  Future<void> _syncManuelle() async {
+    if (!_connectivity.isOnline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Impossible de synchroniser hors ligne'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (_sync.isSyncing) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Synchronisation déjà en cours'),
+        ),
+      );
+      return;
+    }
+
+    await _sync.syncAll();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✅ Synchronisation terminée'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  // NOUVELLE MÉTHODE - Génération des paiements du mois avec vérification connexion
   Future<void> _genererPaiementsMois() async {
+    // Vérifier connexion
+    if (!_connectivity.isOnline) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.cloud_off, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Mode hors ligne'),
+            ],
+          ),
+          content: Text('Cette action nécessite une connexion internet.\n\n'
+              'Vous pouvez consulter les données en cache, mais les modifications '
+              'ne seront possibles qu\'une fois reconnecté.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Compris'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     // Confirmer avec l'utilisateur
     final confirme = await showDialog<bool>(
       context: context,
@@ -360,8 +594,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
 
-      // Recharger données
+      // Recharger données et sync
       _loadData();
+      if (_connectivity.isOnline) {
+        await _sync.syncAll();
+      }
 
       // Après génération réussie, rafraîchir les notifications
       try {
@@ -1195,7 +1432,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ];
 
     return Container(
-      height: 220,
+      height: 240, // Augmenté pour plus d'espace
       padding: EdgeInsets.all(4.w),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1216,37 +1453,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
             'Répartition par étage',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
-          SizedBox(height: 2.w),
+          SizedBox(height: 3.w),
           Expanded(
             child: Row(
               children: [
+                // Graphique pie - optimisé sans texte à l'intérieur
                 Expanded(
-                  flex: 3,
+                  flex: 4,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
                       PieChart(
                         PieChartData(
-                          sectionsSpace: 2,
-                          centerSpaceRadius: 45,
+                          sectionsSpace: 3,
+                          centerSpaceRadius: 40,
                           sections:
                               _occupationEtages.asMap().entries.map((entry) {
                             return PieChartSectionData(
                               color: colors[entry.key % colors.length],
                               value: entry.value.taux,
-                              title: '${entry.value.taux.toInt()}%',
-                              radius: 50,
-                              titleStyle: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
+                              title: '', // Pas de texte dans le graphique
+                              radius: 45,
                             );
                           }).toList(),
                         ),
                       ),
+                      // Pourcentage global au centre
                       Container(
-                        padding: EdgeInsets.all(2.w),
+                        padding: EdgeInsets.all(2.5.w),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           shape: BoxShape.circle,
@@ -1254,36 +1488,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             BoxShadow(
                               color: Colors.grey.withAlpha(51),
                               spreadRadius: 1,
-                              blurRadius: 2,
+                              blurRadius: 3,
                             ),
                           ],
                         ),
-                        child: Text(
-                          '${_dashboardStats!.tauxOccupation.toInt()}%',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[700]),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${_dashboardStats!.tauxOccupation.toInt()}%',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[800],
+                              ),
+                            ),
+                            Text(
+                              'Total',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-                SizedBox(width: 2.w),
+
+                SizedBox(width: 3.w),
+
+                // Légende optimisée
                 Expanded(
-                  flex: 2,
+                  flex: 3,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: _occupationEtages.asMap().entries.map((entry) {
-                      return Padding(
-                        padding: EdgeInsets.symmetric(vertical: 1.w),
+                      return Container(
+                        margin: EdgeInsets.symmetric(vertical: 1.w),
+                        padding: EdgeInsets.all(2.w),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.grey[200]!),
+                        ),
                         child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Container(
-                              width: 14,
-                              height: 14,
+                              width: 12,
+                              height: 12,
                               decoration: BoxDecoration(
                                 color: colors[entry.key % colors.length],
                                 borderRadius: BorderRadius.circular(2),
@@ -1291,14 +1546,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             SizedBox(width: 2.w),
                             Expanded(
-                              child: Text(
-                                '${entry.value.etage}: ${entry.value.taux.toInt()}%',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    entry.value.etage,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    '${entry.value.taux.toInt()}%',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: colors[entry.key % colors.length],
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -1649,6 +1917,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Icons.payment,
                   '/payments-management-screen',
                 ),
+                _buildDrawerItem(
+                  context,
+                  'Rapports',
+                  Icons.assessment,
+                  '/reports-screen',
+                ),
+                _buildDrawerItem(
+                  context,
+                  'Statistiques',
+                  Icons.analytics,
+                  '/statistics-screen',
+                ),
                 const Divider(),
                 _buildDrawerItem(
                   context,
@@ -1690,6 +1970,88 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (!isSelected) {
           Navigator.pushNamedAndRemoveUntil(context, route, (route) => false);
         }
+      },
+    );
+  }
+
+  void _showQuickActionsBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Actions rapides',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 16),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 3,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.1,
+                children: [
+                  _buildQuickActionCard(
+                    icon: Icons.person_add,
+                    label: 'Nouveau\nCommerçant',
+                    color: Colors.blue,
+                    onTap: () => Navigator.pushNamed(
+                        context, AppRoutes.merchantsManagementScreen),
+                  ),
+                  _buildQuickActionCard(
+                    icon: Icons.receipt_long,
+                    label: 'Nouveau\nPaiement',
+                    color: Colors.green,
+                    onTap: () => Navigator.pushNamed(
+                        context, AppRoutes.addPaymentFormScreen),
+                  ),
+                  _buildQuickActionCard(
+                    icon: Icons.folder,
+                    label: 'Documents',
+                    color: Colors.orange,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const DocumentsScreen()),
+                    ),
+                  ),
+                  _buildQuickActionCard(
+                    icon: Icons.assignment,
+                    label: 'Nouveau\nBail',
+                    color: Colors.purple,
+                    onTap: () => Navigator.pushNamed(
+                        context, AppRoutes.addLeaseFormScreen),
+                  ),
+                  _buildQuickActionCard(
+                    icon: Icons.analytics,
+                    label: 'Statistiques',
+                    color: Colors.indigo,
+                    onTap: () => Navigator.pushNamed(
+                        context, AppRoutes.statisticsScreen),
+                  ),
+                  _buildQuickActionCard(
+                    icon: Icons.description,
+                    label: 'Rapports',
+                    color: Colors.teal,
+                    onTap: () =>
+                        Navigator.pushNamed(context, AppRoutes.reportsScreen),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
       },
     );
   }
