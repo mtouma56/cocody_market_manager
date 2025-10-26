@@ -5,12 +5,14 @@ import 'package:percent_indicator/percent_indicator.dart';
 import 'package:sizer/sizer.dart';
 
 import '../../models/dashboard_stats.dart';
-import '../../services/dashboard_service.dart';
 import '../../services/bail_validation_service.dart';
+import '../../services/dashboard_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/paiements_service.dart';
 import '../../services/rapport_service.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/custom_bottom_bar.dart';
+import '../../widgets/notification_badge.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -261,6 +263,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         actions: [
+          // NOTIFICATION BADGE - Badge notifications dans AppBar
+          NotificationBadge(),
+          SizedBox(width: 8),
           // NOUVEAU BOUTON - Génération automatique des paiements
           IconButton(
             icon: const Icon(Icons.auto_fix_high, color: Colors.white),
@@ -357,6 +362,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       // Recharger données
       _loadData();
+
+      // Après génération réussie, rafraîchir les notifications
+      try {
+        await NotificationService().rafraichirCompteurs();
+      } catch (e) {
+        print('❌ Erreur rafraîchissement notifications: $e');
+      }
     } catch (e) {
       Navigator.pop(context); // Fermer loader
 

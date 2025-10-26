@@ -4,6 +4,7 @@ import 'package:sizer/sizer.dart';
 
 import '../core/app_export.dart';
 import '../widgets/custom_error_widget.dart';
+import './services/notification_service.dart';
 import './services/supabase_service.dart';
 
 void main() async {
@@ -15,6 +16,14 @@ void main() async {
     debugPrint('✅ Supabase initialized successfully');
   } catch (e) {
     debugPrint('❌ Failed to initialize Supabase: $e');
+  }
+
+  // Initialiser notifications (Android + iOS)
+  try {
+    await NotificationService().initialize();
+    debugPrint('✅ Notifications initialized successfully');
+  } catch (e) {
+    debugPrint('❌ Failed to initialize notifications: $e');
   }
 
   bool _hasShownError = false;

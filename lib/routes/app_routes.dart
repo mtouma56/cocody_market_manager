@@ -17,6 +17,8 @@ import '../presentation/edit_payment_screen/edit_payment_screen.dart';
 import '../presentation/payment_service_integration_screen/payment_service_integration_screen.dart';
 import '../presentation/reports_screen/reports_screen.dart';
 import '../presentation/settings_screen/settings_screen.dart';
+import '../presentation/overdue_payments_screen/overdue_payments_screen.dart';
+import '../presentation/expiring_leases_screen/expiring_leases_screen.dart';
 
 class AppRoutes {
   static const String splashScreen = '/';
@@ -41,6 +43,8 @@ class AppRoutes {
       '/payment-service-integration-screen';
   static const String reportsScreen = '/reports-screen';
   static const String settingsScreen = '/settings-screen';
+  static const String overduePaymentsScreen = '/overdue-payments-screen';
+  static const String expiringLeasesScreen = '/expiring-leases-screen';
 
   static Map<String, WidgetBuilder> routes = {
     splashScreen: (context) => const SplashScreen(),
@@ -86,5 +90,7 @@ class AppRoutes {
         const PaymentServiceIntegrationScreen(),
     reportsScreen: (context) => const ReportsScreen(),
     settingsScreen: (context) => const SettingsScreen(),
+    overduePaymentsScreen: (context) => const OverduePaymentsScreen(),
+    expiringLeasesScreen: (context) => const ExpiringLeasesScreen(),
   };
 }

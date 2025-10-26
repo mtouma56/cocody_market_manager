@@ -187,6 +187,43 @@ class LeasesService {
     }
   }
 
+  /// Récupère les baux expirant dans les N prochains jours
+  Future<List<Map<String, dynamic>>> getExpiringLeases(
+      int daysUntilExpiry) async {
+    try {
+      final limitDate = DateTime.now().add(Duration(days: daysUntilExpiry));
+
+      final response = await _supabase
+          .from('baux')
+          .select('''
+            id,
+            numero_contrat,
+            date_debut,
+            date_fin,
+            loyer_mensuel,
+            statut,
+            commercants!inner(
+              id,
+              nom,
+              telephone
+            ),
+            locaux!inner(
+              id,
+              numero
+            )
+          ''')
+          .eq('statut', 'Actif')
+          .lte('date_fin', limitDate.toIso8601String())
+          .order('date_fin', ascending: true);
+
+      print('✅ Baux expirant récupérés: ${response.length}');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('❌ Erreur récupération baux expirant: $e');
+      throw Exception('Impossible de récupérer les baux expirant: $e');
+    }
+  }
+
   /// Met à jour le statut d'un bail (UNIQUEMENT pour résiliation manuelle)
   Future<void> updateLeaseStatus(String leaseId, String newStatus) async {
     try {

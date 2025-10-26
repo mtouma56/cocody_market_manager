@@ -11,7 +11,8 @@ class PaymentsService {
   bool _isValidUUID(String? uuid) {
     if (uuid == null || uuid.isEmpty) return false;
     final uuidRegExp = RegExp(
-        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+    );
     return uuidRegExp.hasMatch(uuid);
   }
 
@@ -88,12 +89,14 @@ class PaymentsService {
 
   /// Récupère les paiements par commerçant (avec validation UUID)
   Future<List<Map<String, dynamic>>> getPaymentsByMerchant(
-      String? merchantId) async {
+    String? merchantId,
+  ) async {
     try {
       // ✅ VALIDATION: Vérifie si l'UUID du commerçant est valide
       if (!_isValidUUID(merchantId)) {
         print(
-            '⚠️ UUID commerçant invalide: $merchantId - Retour de tous les paiements');
+          '⚠️ UUID commerçant invalide: $merchantId - Retour de tous les paiements',
+        );
         return await getAllPayments();
       }
 
@@ -127,8 +130,10 @@ class PaymentsService {
           )
         )
       ''')
-          .eq('baux.commercant_id',
-              merchantId) // ✅ Maintenant sûr d'utiliser un UUID valide
+          .eq(
+            'baux.commercant_id',
+            merchantId,
+          ) // ✅ Maintenant sûr d'utiliser un UUID valide
           .order('created_at', ascending: false);
 
       List<Map<String, dynamic>> payments = [];
@@ -168,7 +173,8 @@ class PaymentsService {
       }
 
       print(
-          '✅ Récupération de ${payments.length} paiements pour le commerçant $merchantId');
+        '✅ Récupération de ${payments.length} paiements pour le commerçant $merchantId',
+      );
       return payments;
     } catch (error) {
       print('❌ ERREUR getPaymentsByMerchant: $error');
@@ -244,6 +250,43 @@ class PaymentsService {
     } catch (error) {
       print('❌ ERREUR getPaymentsByStatus: $error');
       throw Exception('Erreur lors du filtrage par statut: $error');
+    }
+  }
+
+  /// Récupère les paiements en retard (FIXED: Suppression des colonnes inexistantes)
+  Future<List<Map<String, dynamic>>> getOverduePayments() async {
+    try {
+      final response = await _supabase
+          .from('paiements')
+          .select('''
+            id,
+            montant,
+            date_echeance,
+            statut,
+            mois_concerne,
+            notes,
+            baux!inner(
+              id,
+              numero_contrat,
+              commercants!inner(
+                id,
+                nom,
+                contact
+              ),
+              locaux!inner(
+                id,
+                numero
+              )
+            )
+          ''')
+          .eq('statut', 'En retard')
+          .order('date_echeance', ascending: true);
+
+      print('✅ Paiements en retard récupérés: ${response.length}');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('❌ Erreur récupération paiements en retard: $e');
+      throw Exception('Impossible de récupérer les paiements en retard: $e');
     }
   }
 
@@ -349,6 +392,29 @@ class PaymentsService {
     }
   }
 
+  /// Marque un paiement comme payé
+  Future<void> markPaymentAsPaid(String paymentId) async {
+    try {
+      final response = await _supabase
+          .from('paiements')
+          .update({
+            'statut': 'Payé',
+            'date_paiement': DateTime.now().toIso8601String(),
+          })
+          .eq('id', paymentId)
+          .select();
+
+      if (response.isEmpty) {
+        throw Exception('Paiement non trouvé');
+      }
+
+      print('✅ Paiement marqué comme payé: $paymentId');
+    } catch (e) {
+      print('❌ Erreur marquer paiement payé: $e');
+      throw Exception('Impossible de marquer le paiement comme payé: $e');
+    }
+  }
+
   /// Détermine l'urgence du paiement
   String _determineUrgency(
     String? statut,
@@ -377,7 +443,8 @@ class PaymentsService {
       return 'low';
     } catch (e) {
       print(
-          '❌ Error parsing date in _determineUrgency: $safeDateEcheance - $e');
+        '❌ Error parsing date in _determineUrgency: $safeDateEcheance - $e',
+      );
       return 'low'; // Safe fallback
     }
   }
