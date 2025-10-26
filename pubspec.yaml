@@ -31,6 +31,8 @@ dependencies:
   pdf: ^3.11.3
   printing: ^5.14.2
   flutter_local_notifications: ^17.0.0
+  path_provider: ^2.1.1
+  share_plus: ^7.2.1
 
 dev_dependencies:
   flutter_test:    # CRITICAL: Required for Flutter project testing - DO NOT REMOVE

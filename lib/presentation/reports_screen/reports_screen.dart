@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/paiements_service.dart';
 import '../../services/rapport_service.dart';
+import '../../services/excel_export_service.dart';
 import '../../widgets/custom_bottom_bar.dart';
 
 class ReportsScreen extends StatefulWidget {
@@ -14,6 +15,7 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   final _service = PaiementsService();
   final _rapportService = RapportService();
+  final _excelService = ExcelExportService();
 
   String _periodeSelectionnee = 'Aujourd\'hui';
   String _typeRapport = 'Tous'; // Type de rapport
@@ -610,43 +612,153 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ],
       ),
 
-      // Bouton export PDF
+      // Boutons d'export (Excel + PDF)
       floatingActionButton: _paiements.isNotEmpty
-          ? FloatingActionButton.extended(
-              onPressed: () async {
-                try {
-                  await _rapportService.genererRapportPDF(
-                    paiements: _paiements,
-                    dateDebut: _dateDebut,
-                    dateFin: _dateFin,
-                    periode: isRapportSpecial
-                        ? 'Toutes périodes'
-                        : _periodeSelectionnee,
-                    typeRapport: _typeRapport,
-                  );
+          ? Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // Bouton Excel (vert)
+                FloatingActionButton.extended(
+                  onPressed: () async {
+                    try {
+                      // Afficher loader
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => const Center(
+                          child: Card(
+                            child: Padding(
+                              padding: EdgeInsets.all(20),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircularProgressIndicator(
+                                      color: Colors.green),
+                                  SizedBox(height: 16),
+                                  Text('Génération Excel...'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
 
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Rapport PDF généré'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Erreur: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              },
-              icon: const Icon(Icons.picture_as_pdf),
-              label: const Text('Export PDF'),
-              backgroundColor: Colors.red,
+                      // Générer Excel (CSV)
+                      await _excelService.exporterRapportPaiements(
+                        paiements: _paiements,
+                        dateDebut: _dateDebut,
+                        dateFin: _dateFin,
+                        periode: isRapportSpecial
+                            ? 'Toutes périodes'
+                            : _periodeSelectionnee,
+                      );
+
+                      // Fermer loader
+                      if (mounted) Navigator.pop(context);
+
+                      // Confirmation
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('📊 Rapport Excel généré et partagé'),
+                            backgroundColor: Colors.green,
+                            duration: Duration(seconds: 3),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      // Fermer loader
+                      if (mounted) Navigator.pop(context);
+
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('❌ Erreur export Excel: $e'),
+                            backgroundColor: Colors.red,
+                            duration: const Duration(seconds: 4),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.table_chart),
+                  label: const Text('Excel'),
+                  backgroundColor: Colors.green,
+                  heroTag: 'excel', // Important pour éviter conflit
+                ),
+
+                const SizedBox(width: 12),
+
+                // Bouton PDF (rouge) - existant
+                FloatingActionButton.extended(
+                  onPressed: () async {
+                    try {
+                      // Afficher loader
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => const Center(
+                          child: Card(
+                            child: Padding(
+                              padding: EdgeInsets.all(20),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircularProgressIndicator(color: Colors.red),
+                                  SizedBox(height: 16),
+                                  Text('Génération PDF...'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+
+                      // Générer PDF
+                      await _rapportService.genererRapportPDF(
+                        paiements: _paiements,
+                        dateDebut: _dateDebut,
+                        dateFin: _dateFin,
+                        periode: isRapportSpecial
+                            ? 'Toutes périodes'
+                            : _periodeSelectionnee,
+                        typeRapport: _typeRapport,
+                      );
+
+                      // Fermer loader
+                      if (mounted) Navigator.pop(context);
+
+                      // Confirmation
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('📄 Rapport PDF généré'),
+                            backgroundColor: Colors.green,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      // Fermer loader
+                      if (mounted) Navigator.pop(context);
+
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('❌ Erreur export PDF: $e'),
+                            backgroundColor: Colors.red,
+                            duration: const Duration(seconds: 4),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: const Text('PDF'),
+                  backgroundColor: Colors.red,
+                  heroTag: 'pdf', // Important pour éviter conflit
+                ),
+              ],
             )
           : null,
 
