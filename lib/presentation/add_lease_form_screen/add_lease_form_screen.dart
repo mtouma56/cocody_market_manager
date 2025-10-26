@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:sizer/sizer.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:sizer/sizer.dart';
 
+import '../../services/bail_validation_service.dart';
 import '../../services/leases_service.dart';
 import '../../widgets/custom_app_bar.dart';
 
@@ -16,6 +17,7 @@ class AddLeaseFormScreen extends StatefulWidget {
 class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _leasesService = LeasesService();
+  final _validationService = BailValidationService();
 
   // Form controllers and variables
   String? _selectedPropertyId;
@@ -182,32 +184,147 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
     );
   }
 
-  Future<void> _saveLease() async {
-    if (!_validateForm()) return;
+  Future<void> _creerBail() async {
+    if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isSaving = true);
+    _formKey.currentState!.save();
 
-    try {
-      final rentAmount = double.parse(
-        _rentAmountController.text.replaceAll(' ', ''),
+    // ═══════════════════════════════════════════════════════
+    // VALIDATION CRITIQUE : Vérifier disponibilité local
+    // ═══════════════════════════════════════════════════════
+
+    final validation =
+        await _validationService.verifierLocalDisponible(_selectedPropertyId!);
+
+    if (!validation.isValid) {
+      final bail = validation.bailExistant;
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.block, color: Colors.red, size: 32),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Local déjà occupé',
+                  style: TextStyle(fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '⚠️ Impossible de créer ce bail',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade900,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Ce local a déjà un bail actif. Un local ne peut avoir qu\'un seul bail actif à la fois.',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                if (bail != null) ...[
+                  SizedBox(height: 20),
+                  Text(
+                    'Bail existant :',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  _buildInfoRow(
+                    Icons.receipt,
+                    'Contrat',
+                    bail['numero_contrat'] ?? 'N/A',
+                  ),
+                  _buildInfoRow(
+                    Icons.person,
+                    'Commerçant',
+                    bail['commercants']?['nom'] ?? 'N/A',
+                  ),
+                  _buildInfoRow(
+                    Icons.payments,
+                    'Loyer',
+                    '${bail['montant_loyer']} FCFA/mois',
+                  ),
+                  SizedBox(height: 16),
+                  Container(
+                    padding: EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: Colors.blue.shade700,
+                          size: 20,
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Résiliez d\'abord le bail existant pour libérer ce local.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.blue.shade900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Compris'),
+            ),
+          ],
+        ),
       );
 
-      // Gestion du dépôt
-      double? montantCaution;
-      double? montantPasDePorte;
+      return; // ARRÊT - Ne crée PAS le bail
+    }
 
-      if (_depositAmountController.text.isNotEmpty) {
-        final depositAmount = double.parse(
-          _depositAmountController.text.replaceAll(' ', ''),
-        );
+    // ═══════════════════════════════════════════════════════
+    // Si validation OK, créer le bail
+    // ═══════════════════════════════════════════════════════
 
-        if (_depositType == 'caution') {
-          montantCaution = depositAmount;
-        } else {
-          montantPasDePorte = depositAmount;
-        }
-      }
+    // Parse amounts from text controllers
+    final rentAmount =
+        double.parse(_rentAmountController.text.replaceAll(' ', ''));
+    final depositAmount = _depositAmountController.text.isEmpty
+        ? 0.0
+        : double.parse(_depositAmountController.text.replaceAll(' ', ''));
 
+    try {
+      // FIX: Call createLease with named parameters instead of Map
       await _leasesService.createLease(
         contractNumber: _contractNumber,
         propertyId: _selectedPropertyId!,
@@ -215,38 +332,62 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
         startDate: _dateDebut!,
         endDate: _dateFin!,
         monthlyRent: rentAmount,
-        montantCaution: montantCaution,
-        montantPasDePorte: montantPasDePorte,
+        montantCaution: _depositType == 'caution' ? depositAmount : null,
+        montantPasDePorte:
+            _depositType == 'pas_de_porte' ? depositAmount : null,
       );
 
-      if (mounted) {
-        HapticFeedback.mediumImpact();
+      Navigator.pop(context, true);
 
-        // Message de succès détaillé
-        String successMessage = '✅ Bail $_contractNumber créé avec succès';
-        if (_depositAmountController.text.isNotEmpty) {
-          final depositAmount = double.parse(
-            _depositAmountController.text.replaceAll(' ', ''),
-          );
-          final typeDepotText =
-              _depositType == 'caution' ? 'Caution' : 'Pas de porte';
-          successMessage +=
-              '\n$typeDepotText: ${depositAmount.toStringAsFixed(0)} FCFA';
-        }
-
-        _showSuccess(successMessage);
-
-        // Attendre un peu pour que l'utilisateur voie le message
-        await Future.delayed(const Duration(milliseconds: 1500));
-
-        // Retourner à l'écran précédent avec succès
-        Navigator.pop(context, true);
-      }
-    } catch (error) {
-      setState(() => _isSaving = false);
-      print('❌ Erreur création bail: $error');
-      _showError('❌ Erreur: ${error.toString()}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Bail créé avec succès'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Erreur'),
+          content: Text('Impossible de créer le bail: $e'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK'),
+            ),
+          ],
+        ),
+      );
     }
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Colors.grey.shade600),
+          SizedBox(width: 8),
+          Text(
+            '$label : ',
+            style: TextStyle(
+              color: Colors.grey.shade700,
+              fontSize: 13,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _formatDate(DateTime? date) {
@@ -1136,7 +1277,7 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
                   width: double.infinity,
                   height: 6.h,
                   child: ElevatedButton(
-                    onPressed: _isSaving ? null : _saveLease,
+                    onPressed: _isSaving ? null : _creerBail,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).primaryColor,
                       foregroundColor: Colors.white,

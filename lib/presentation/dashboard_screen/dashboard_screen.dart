@@ -6,6 +6,7 @@ import 'package:sizer/sizer.dart';
 
 import '../../models/dashboard_stats.dart';
 import '../../services/dashboard_service.dart';
+import '../../services/bail_validation_service.dart';
 import '../../services/paiements_service.dart';
 import '../../services/rapport_service.dart';
 import '../../widgets/custom_app_bar.dart';
@@ -23,6 +24,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final DashboardService _dashboardService = DashboardService();
   final PaiementsService _paiementsService = PaiementsService();
   final RapportService _rapportService = RapportService();
+  final _validationService = BailValidationService();
 
   bool _isLoading = true;
   String? _errorMessage;
@@ -37,10 +39,184 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDashboardData();
+    _loadData();
+    _verifierConflits(); // Vérification au démarrage
   }
 
-  Future<void> _loadDashboardData() async {
+  Future<void> _verifierConflits() async {
+    try {
+      final conflits = await _validationService.getConflits();
+
+      if (conflits.isNotEmpty && mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.warning, color: Colors.orange, size: 32),
+                SizedBox(width: 12),
+                Text('Alerte système'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '⚠️ ${conflits.length} locaux ont plusieurs baux actifs.',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'Ceci est une erreur critique qui nécessite une intervention immédiate.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                SizedBox(height: 8),
+                ...conflits.map((c) => Text(
+                      '• ${c['local_numero']} : ${c['nb_baux_actifs']} baux actifs',
+                      style: TextStyle(fontSize: 12, color: Colors.red),
+                    )),
+                SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          await _resoudreConflitsAutomatiquement();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: Text('Résoudre automatiquement'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Ignorer pour maintenant'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Erreur vérification conflits: $e');
+    }
+  }
+
+  Future<void> _resoudreConflitsAutomatiquement() async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Résolution des conflits en cours...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final resolutions = await _validationService.resoudreConflits();
+
+      Navigator.pop(context); // Fermer le dialog de chargement
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 32),
+              SizedBox(width: 12),
+              Text('Conflits résolus'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '✅ ${resolutions.length} conflits ont été résolus automatiquement.',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 12),
+              if (resolutions.isNotEmpty) ...[
+                Text('Détails des résolutions :'),
+                SizedBox(height: 8),
+                ...resolutions.map((r) => Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Container(
+                        padding: EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Local ${r['local_numero']}',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text('Bail conservé: ${r['bail_garde']}'),
+                            if (r['baux_resilies'] != null &&
+                                r['baux_resilies'].isNotEmpty)
+                              Text(
+                                  'Baux résiliés: ${(r['baux_resilies'] as List).join(', ')}'),
+                          ],
+                        ),
+                      ),
+                    )),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _loadData(); // Recharger les données
+              },
+              child: Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      Navigator.pop(context); // Fermer le dialog de chargement
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Erreur'),
+          content: Text('Impossible de résoudre les conflits: $e'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Future<void> _loadData() async {
     try {
       setState(() {
         _isLoading = true;
@@ -95,7 +271,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       drawer: _buildDrawer(context),
       body: RefreshIndicator(
-        onRefresh: _loadDashboardData,
+        onRefresh: _loadData,
         child: _isLoading
             ? _buildLoadingState()
             : _errorMessage != null
@@ -180,7 +356,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
 
       // Recharger données
-      _loadDashboardData();
+      _loadData();
     } catch (e) {
       Navigator.pop(context); // Fermer loader
 
@@ -254,7 +430,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             SizedBox(height: 6.w),
             ElevatedButton.icon(
-              onPressed: _loadDashboardData,
+              onPressed: _loadData,
               icon: const Icon(Icons.refresh),
               label: const Text('Réessayer'),
               style: ElevatedButton.styleFrom(
