@@ -114,7 +114,7 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
           '📊 Après filtre statut "$statutDB": ${filtered.length} paiements (était $beforeFilter)');
     }
 
-    // ÉTAPE 2: Filtre par recherche SEULEMENT si recherche non vide
+    // ÉTAPE 2: Filtre par recherche SEULEMENT si recherche non vide - ENHANCED SEARCH
     if (_searchController.text.isNotEmpty) {
       final searchTerm = _searchController.text.toLowerCase();
       print('🔎 Filtrage par recherche: "$searchTerm"');
@@ -123,14 +123,29 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
       filtered = filtered.where((paiement) {
         final bail = paiement['baux'] as Map<String, dynamic>?;
         final commercant = bail?['commercants'] as Map<String, dynamic>?;
+        final local = bail?['locaux'] as Map<String, dynamic>?;
+
+        // Search fields
         final nomCommercant =
             commercant?['nom']?.toString().toLowerCase() ?? '';
+        final numeroLocal = local?['numero']?.toString().toLowerCase() ?? '';
+        final dateEcheance =
+            paiement['date_echeance']?.toString().toLowerCase() ?? '';
+        final datePaiement =
+            paiement['date_paiement']?.toString().toLowerCase() ?? '';
+        final moisConcerne =
+            paiement['mois_concerne']?.toString().toLowerCase() ?? '';
 
-        final matches = nomCommercant.contains(searchTerm);
+        // Enhanced search - check multiple fields
+        final matches = nomCommercant.contains(searchTerm) ||
+            numeroLocal.contains(searchTerm) ||
+            dateEcheance.contains(searchTerm) ||
+            datePaiement.contains(searchTerm) ||
+            moisConcerne.contains(searchTerm);
 
         if (matches) {
           print(
-              '   🎯 Correspondance recherche: "$nomCommercant" contient "$searchTerm"');
+              '   🎯 Correspondance recherche: Commerçant: "$nomCommercant", Local: "$numeroLocal", Date échéance: "$dateEcheance", Date paiement: "$datePaiement"');
         }
 
         return matches;
@@ -147,7 +162,7 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
       print('   1. Y a-t-il des paiements avec statut "$_currentFilter" ?');
       if (_searchController.text.isNotEmpty) {
         print(
-            '   2. Ces paiements ont-ils des commerçants contenant "${_searchController.text}" ?');
+            '   2. Ces paiements ont-ils des données contenant "${_searchController.text}" ?');
       }
     }
     print('🔍 === FIN FILTRAGE ===\n');
@@ -179,7 +194,7 @@ class _PaymentsManagementScreenState extends State<PaymentsManagementScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Rechercher par commerçant...',
+                hintText: 'Rechercher par commerçant, local, date...',
                 prefixIcon: Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(

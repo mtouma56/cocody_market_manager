@@ -9,35 +9,45 @@ class PaiementsService {
 
   // Récupère tous les paiements
   Future<List<Map<String, dynamic>>> getPaiements({String? statut}) async {
-    var query = _supabase.from('paiements').select('''
+    var query = _supabase
+        .from('paiements')
+        .select('''
       *,
       baux!inner(
         *,
         locaux!inner(*, types_locaux(*), etages(*)),
         commercants(*)
       )
-    ''').order('created_at', ascending: false);
+    ''')
+        .order('created_at', ascending: false);
 
     if (statut != null) {
-      query = _supabase.from('paiements').select('''
+      query = _supabase
+          .from('paiements')
+          .select('''
         *,
         baux!inner(
           *,
           locaux!inner(*, types_locaux(*), etages(*)),
           commercants(*)
         )
-      ''').eq('statut', statut).order('created_at', ascending: false);
+      ''')
+          .eq('statut', statut)
+          .order('created_at', ascending: false);
     }
     return List<Map<String, dynamic>>.from(await query);
   }
 
   // Récupère baux actifs avec recherche
   Future<List<Map<String, dynamic>>> searchBauxActifs(String query) async {
-    final baux = await _supabase.from('baux').select('''
+    final baux = await _supabase
+        .from('baux')
+        .select('''
       *,
       locaux!inner(*, types_locaux(*), etages(*)),
       commercants(*)
-    ''').eq('statut', 'Actif');
+    ''')
+        .eq('statut', 'Actif');
 
     if (query.isEmpty) return List<Map<String, dynamic>>.from(baux);
 
@@ -54,58 +64,146 @@ class PaiementsService {
   // Récupère locaux occupés (avec bail actif)
   Future<List<Map<String, dynamic>>> searchLocauxOccupes(String query) async {
     try {
-      // First get all active leases with their related data
-      final baux = await _supabase.from('baux').select('''
-        *,
-        locaux!inner(*, types_locaux(*), etages(*)),
-        commercants(*)
-      ''').eq('statut', 'Actif').eq('locaux.statut', 'Occupé');
+      print('🔍 Recherche locaux occupés avec query: "$query"');
 
-      if (query.isEmpty) {
-        // Transform baux data to have local as root with baux nested
-        return List<Map<String, dynamic>>.from(baux.map((bail) {
-          final local = bail['locaux'];
-          return {
-            ...local,
-            'baux': {
-              'id': bail['id'],
-              'statut': bail['statut'],
-              'montant_loyer': bail['montant_loyer'],
-              'numero_contrat': bail['numero_contrat'],
-              'date_debut': bail['date_debut'],
-              'date_fin': bail['date_fin'],
-              'commercants': bail['commercants'],
-            },
-          };
-        }));
+      // Simplified query to get baux with proper joins - removed inner joins that might exclude records
+      final bauxResponse = await _supabase
+          .from('baux')
+          .select('''
+            id,
+            statut,
+            montant_loyer,
+            numero_contrat,
+            date_debut,
+            date_fin,
+            actif,
+            commercant_id,
+            local_id,
+            locaux!baux_local_id_fkey(
+              id,
+              numero,
+              statut,
+              actif,
+              type_id,
+              etage_id,
+              types_locaux(nom),
+              etages(nom)
+            ),
+            commercants!baux_commercant_id_fkey(
+              id,
+              nom,
+              activite,
+              contact,
+              actif
+            )
+          ''')
+          .inFilter('statut', ['Actif', 'Expire bientôt'])
+          .eq('actif', true)
+          .order('created_at', ascending: false);
+
+      print('📊 Nombre total de baux actifs trouvés: ${bauxResponse.length}');
+
+      if (bauxResponse.isEmpty) {
+        print('⚠️ Aucun bail actif trouvé dans la base');
+        return [];
       }
 
-      // Filter based on query
-      final filteredBaux = baux.where((bail) {
-        final numero = bail['locaux']?['numero']?.toLowerCase() ?? '';
-        final commercant = bail['commercants']?['nom']?.toLowerCase() ?? '';
-        final q = query.toLowerCase();
-        return numero.contains(q) || commercant.contains(q);
-      }).toList();
+      List<Map<String, dynamic>> baux = List<Map<String, dynamic>>.from(
+        bauxResponse,
+      );
 
-      // Transform filtered data
-      return List<Map<String, dynamic>>.from(filteredBaux.map((bail) {
-        final local = bail['locaux'];
-        return {
-          ...local,
-          'baux': {
-            'id': bail['id'],
-            'statut': bail['statut'],
-            'montant_loyer': bail['montant_loyer'],
-            'numero_contrat': bail['numero_contrat'],
-            'date_debut': bail['date_debut'],
-            'date_fin': bail['date_fin'],
-            'commercants': bail['commercants'],
-          },
-        };
-      }));
-    } catch (e) {
+      // Filter records where both local and commercant exist and are active
+      baux =
+          baux.where((bail) {
+            final local = bail['locaux'];
+            final commercant = bail['commercants'];
+
+            // Skip if either local or commercant is null or inactive
+            if (local == null || commercant == null) {
+              print('⚠️ Bail ${bail['id']} ignoré - données manquantes');
+              return false;
+            }
+
+            // Skip if local or commercant is inactive
+            if (local['actif'] != true || commercant['actif'] != true) {
+              print(
+                '⚠️ Bail ${bail['id']} ignoré - local ou commerçant inactif',
+              );
+              return false;
+            }
+
+            return true;
+          }).toList();
+
+      // Filter based on search query if provided
+      if (query.isNotEmpty) {
+        final queryLower = query.toLowerCase();
+        baux =
+            baux.where((bail) {
+              final local = bail['locaux'];
+              final commercant = bail['commercants'];
+
+              final numeroLocal =
+                  (local?['numero'] ?? '').toString().toLowerCase();
+              final nomCommercant =
+                  (commercant?['nom'] ?? '').toString().toLowerCase();
+
+              return numeroLocal.contains(queryLower) ||
+                  nomCommercant.contains(queryLower);
+            }).toList();
+
+        print('🔍 Après filtrage par "$query": ${baux.length} résultats');
+      }
+
+      // Transform baux data to have local as root with baux nested - improved transformation
+      final locauxTransformes =
+          baux
+              .map((bail) {
+                final local = bail['locaux'];
+                if (local == null) {
+                  print('⚠️ Local null pour bail ${bail['id']}');
+                  return null;
+                }
+
+                // Create properly structured response with all necessary fields
+                return {
+                  'id': local['id'],
+                  'numero': local['numero'],
+                  'statut': local['statut'],
+                  'actif': local['actif'],
+                  'type_id': local['type_id'],
+                  'etage_id': local['etage_id'],
+                  'types_locaux': local['types_locaux'],
+                  'etages': local['etages'],
+                  'baux': {
+                    'id': bail['id'],
+                    'statut': bail['statut'],
+                    'montant_loyer': bail['montant_loyer'],
+                    'numero_contrat': bail['numero_contrat'],
+                    'date_debut': bail['date_debut'],
+                    'date_fin': bail['date_fin'],
+                    'actif': bail['actif'],
+                    'commercants': bail['commercants'],
+                  },
+                };
+              })
+              .where((item) => item != null)
+              .cast<Map<String, dynamic>>()
+              .toList();
+
+      print('✅ Locaux transformés: ${locauxTransformes.length}');
+
+      // Debug: Print first few items to verify structure
+      if (locauxTransformes.isNotEmpty) {
+        print(
+          '📝 Premier local transformé: ${locauxTransformes.first['numero']} - ${locauxTransformes.first['baux']['commercants']['nom']}',
+        );
+      }
+
+      return locauxTransformes;
+    } catch (e, stackTrace) {
       print('❌ ERREUR searchLocauxOccupes: $e');
+      print('📍 Stack trace: $stackTrace');
       return [];
     }
   }
@@ -113,11 +211,12 @@ class PaiementsService {
   // Vérifie paiements existants pour un bail
   Future<Map<String, dynamic>> getStatutPaiementsBail(String bailId) async {
     try {
-      final bail = await _supabase
-          .from('baux')
-          .select('montant_loyer, date_debut')
-          .eq('id', bailId)
-          .single();
+      final bail =
+          await _supabase
+              .from('baux')
+              .select('montant_loyer, date_debut')
+              .eq('id', bailId)
+              .single();
 
       final montantLoyer = (bail['montant_loyer'] as num).toDouble();
       final dateDebut = DateTime.parse(bail['date_debut']);
@@ -166,11 +265,12 @@ class PaiementsService {
         orElse: () => {},
       );
 
-      final moisEnRetard = moisDisponibles.where((m) {
-        final moisDate = DateTime.parse('${m['mois']}-01');
-        return !m['est_solde'] &&
-            moisDate.isBefore(DateTime(now.year, now.month));
-      }).toList();
+      final moisEnRetard =
+          moisDisponibles.where((m) {
+            final moisDate = DateTime.parse('${m['mois']}-01');
+            return !m['est_solde'] &&
+                moisDate.isBefore(DateTime(now.year, now.month));
+          }).toList();
 
       return {
         'mois_actuel_solde': moisActuelData['est_solde'] ?? false,
@@ -198,18 +298,21 @@ class PaiementsService {
       'Septembre',
       'Octobre',
       'Novembre',
-      'Décembre'
+      'Décembre',
     ];
     return '${mois[date.month - 1]} ${date.year}';
   }
 
   // Vérifie si un paiement en attente existe pour ce bail et ce mois
   Future<Map<String, dynamic>?> getPaiementEnAttente(
-      String bailId, String moisConcerne) async {
+    String bailId,
+    String moisConcerne,
+  ) async {
     try {
-      final result = await _supabase
-          .from('paiements')
-          .select('''
+      final result =
+          await _supabase
+              .from('paiements')
+              .select('''
             *,
             baux!inner(
               *,
@@ -217,10 +320,10 @@ class PaiementsService {
               commercants(*)
             )
           ''')
-          .eq('bail_id', bailId)
-          .eq('mois_concerne', moisConcerne)
-          .inFilter('statut', ['En attente', 'En retard'])
-          .maybeSingle();
+              .eq('bail_id', bailId)
+              .eq('mois_concerne', moisConcerne)
+              .inFilter('statut', ['En attente', 'En retard'])
+              .maybeSingle();
 
       return result;
     } catch (e) {
@@ -237,11 +340,12 @@ class PaiementsService {
     String? notes,
   }) async {
     try {
-      final paiement = await _supabase
-          .from('paiements')
-          .select('montant, bail_id')
-          .eq('id', paiementId)
-          .single();
+      final paiement =
+          await _supabase
+              .from('paiements')
+              .select('montant, bail_id')
+              .eq('id', paiementId)
+              .single();
 
       final montantAttendu = (paiement['montant'] as num).toDouble();
 
@@ -254,18 +358,19 @@ class PaiementsService {
         nouveauStatut = 'En attente';
       }
 
-      final response = await _supabase
-          .from('paiements')
-          .update({
-            'montant': montantPaye,
-            'statut': nouveauStatut,
-            'mode_paiement': modePaiement,
-            'date_paiement': DateTime.now().toIso8601String().split('T')[0],
-            'notes': notes,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', paiementId)
-          .select('''
+      final response =
+          await _supabase
+              .from('paiements')
+              .update({
+                'montant': montantPaye,
+                'statut': nouveauStatut,
+                'mode_paiement': modePaiement,
+                'date_paiement': DateTime.now().toIso8601String().split('T')[0],
+                'notes': notes,
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', paiementId)
+              .select('''
             *,
             baux!inner(
               *,
@@ -273,7 +378,7 @@ class PaiementsService {
               commercants(*)
             )
           ''')
-          .single();
+              .single();
 
       return response;
     } catch (e) {
@@ -291,11 +396,12 @@ class PaiementsService {
     String? notes,
   }) async {
     try {
-      final bail = await _supabase
-          .from('baux')
-          .select('montant_loyer')
-          .eq('id', bailId)
-          .single();
+      final bail =
+          await _supabase
+              .from('baux')
+              .select('montant_loyer')
+              .eq('id', bailId)
+              .single();
 
       final montantLoyer = (bail['montant_loyer'] as num).toDouble();
 
@@ -329,25 +435,30 @@ class PaiementsService {
         statut = 'En retard';
       }
 
-      final response = await _supabase.from('paiements').insert({
-        'bail_id': bailId,
-        'montant': montant,
-        'date_paiement': DateTime.now().toIso8601String().split('T')[0],
-        'date_echeance':
-            '${moisDate.year}-${moisDate.month.toString().padLeft(2, '0')}-10',
-        'mois_concerne': moisConcerne,
-        'statut': statut,
-        'mode_paiement': modePaiement,
-        'notes': notes,
-        'created_at': DateTime.now().toIso8601String(),
-      }).select('''
+      final response =
+          await _supabase
+              .from('paiements')
+              .insert({
+                'bail_id': bailId,
+                'montant': montant,
+                'date_paiement': DateTime.now().toIso8601String().split('T')[0],
+                'date_echeance':
+                    '${moisDate.year}-${moisDate.month.toString().padLeft(2, '0')}-10',
+                'mois_concerne': moisConcerne,
+                'statut': statut,
+                'mode_paiement': modePaiement,
+                'notes': notes,
+                'created_at': DateTime.now().toIso8601String(),
+              })
+              .select('''
         *,
         baux!inner(
           *,
           locaux!inner(*, types_locaux(*), etages(*)),
           commercants(*)
         )
-      ''').single();
+      ''')
+              .single();
 
       return response;
     } catch (e) {
@@ -366,37 +477,44 @@ class PaiementsService {
 
       // Vérification format UUID
       final uuidRegex = RegExp(
-          r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-          caseSensitive: false);
+        r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+        caseSensitive: false,
+      );
       if (!uuidRegex.hasMatch(paiementId)) {
         throw Exception('Format d\'ID de paiement invalide: $paiementId');
       }
 
       print('🔍 Récupération paiement ID: $paiementId');
 
-      final paiement = await _supabase.from('paiements').select('''
+      final paiement =
+          await _supabase
+              .from('paiements')
+              .select('''
           *,
           baux!inner(
             *,
             locaux!inner(*, types_locaux(*), etages(*)),
             commercants(*)
           )
-        ''').eq('id', paiementId).single();
+        ''')
+              .eq('id', paiementId)
+              .single();
 
       print('✅ Paiement récupéré avec succès');
       return paiement;
     } catch (e) {
       print('❌ ERREUR getPaiementDetails: $e');
 
-      if (e
-          .toString()
-          .contains('JSON object requested, multiple (or no) rows returned')) {
+      if (e.toString().contains(
+        'JSON object requested, multiple (or no) rows returned',
+      )) {
         throw Exception('Paiement non trouvé avec l\'ID: $paiementId');
       } else if (e.toString().contains('invalid input syntax for type uuid')) {
         throw Exception('ID de paiement invalide (format UUID requis)');
       } else {
         throw Exception(
-            'Erreur lors du chargement du paiement: ${e.toString()}');
+          'Erreur lors du chargement du paiement: ${e.toString()}',
+        );
       }
     }
   }
@@ -411,21 +529,23 @@ class PaiementsService {
   }) async {
     try {
       // Récupère les infos du paiement pour calculer le nouveau statut
-      final paiement = await _supabase
-          .from('paiements')
-          .select('bail_id, mois_concerne')
-          .eq('id', paiementId)
-          .single();
+      final paiement =
+          await _supabase
+              .from('paiements')
+              .select('bail_id, mois_concerne')
+              .eq('id', paiementId)
+              .single();
 
       final bailId = paiement['bail_id'];
       final moisConcerne = paiement['mois_concerne'];
 
       // Récupère le montant du loyer pour ce bail
-      final bail = await _supabase
-          .from('baux')
-          .select('montant_loyer')
-          .eq('id', bailId)
-          .single();
+      final bail =
+          await _supabase
+              .from('baux')
+              .select('montant_loyer')
+              .eq('id', bailId)
+              .single();
 
       final montantLoyer = (bail['montant_loyer'] as num).toDouble();
 
@@ -449,18 +569,19 @@ class PaiementsService {
       }
 
       // Met à jour le paiement
-      final response = await _supabase
-          .from('paiements')
-          .update({
-            'montant': montant,
-            'mode_paiement': modePaiement,
-            'date_paiement': datePaiement,
-            'statut': nouveauStatut,
-            'notes': notes,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', paiementId)
-          .select('''
+      final response =
+          await _supabase
+              .from('paiements')
+              .update({
+                'montant': montant,
+                'mode_paiement': modePaiement,
+                'date_paiement': datePaiement,
+                'statut': nouveauStatut,
+                'notes': notes,
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', paiementId)
+              .select('''
             *,
             baux!inner(
               *,
@@ -468,7 +589,7 @@ class PaiementsService {
               commercants(*)
             )
           ''')
-          .single();
+              .single();
 
       return response;
     } catch (e) {
@@ -481,10 +602,12 @@ class PaiementsService {
   Future<List<Map<String, dynamic>>> getPaiementsAujourdhui() async {
     try {
       final now = DateTime.now();
-      final dateDebut = intl.DateFormat('yyyy-MM-dd')
-          .format(DateTime(now.year, now.month, now.day));
-      final dateFin = intl.DateFormat('yyyy-MM-dd')
-          .format(DateTime(now.year, now.month, now.day + 1));
+      final dateDebut = intl.DateFormat(
+        'yyyy-MM-dd',
+      ).format(DateTime(now.year, now.month, now.day));
+      final dateFin = intl.DateFormat(
+        'yyyy-MM-dd',
+      ).format(DateTime(now.year, now.month, now.day + 1));
 
       final paiements = await _supabase
           .from('paiements')
@@ -511,7 +634,9 @@ class PaiementsService {
   // Nouvelle méthode pour récupérer les paiements en retard avec montant initial
   Future<List<Map<String, dynamic>>> getPaiementsEnRetard() async {
     try {
-      final paiements = await _supabase.from('paiements').select('''
+      final paiements = await _supabase
+          .from('paiements')
+          .select('''
           *,
           baux!inner(
             numero_contrat,
@@ -519,18 +644,18 @@ class PaiementsService {
             commercants(nom, activite),
             locaux(numero)
           )
-        ''').eq('statut', 'En retard').order('date_echeance', ascending: true);
+        ''')
+          .eq('statut', 'En retard')
+          .order('date_echeance', ascending: true);
 
       // Ajouter le montant_initial pour chaque paiement
-      final paiementsAvecMontantInitial = paiements.map((p) {
-        final bail = p['baux'] as Map<String, dynamic>?;
-        final montantLoyer = bail?['montant_loyer'];
+      final paiementsAvecMontantInitial =
+          paiements.map((p) {
+            final bail = p['baux'] as Map<String, dynamic>?;
+            final montantLoyer = bail?['montant_loyer'];
 
-        return {
-          ...p,
-          'montant_initial': montantLoyer ?? p['montant'],
-        };
-      }).toList();
+            return {...p, 'montant_initial': montantLoyer ?? p['montant']};
+          }).toList();
 
       return List<Map<String, dynamic>>.from(paiementsAvecMontantInitial);
     } catch (e) {
@@ -542,7 +667,9 @@ class PaiementsService {
   // Nouvelle méthode pour récupérer les paiements en attente
   Future<List<Map<String, dynamic>>> getPaiementsEnAttente() async {
     try {
-      final paiements = await _supabase.from('paiements').select('''
+      final paiements = await _supabase
+          .from('paiements')
+          .select('''
           *,
           baux!inner(
             numero_contrat,
@@ -550,7 +677,9 @@ class PaiementsService {
             commercants(nom, activite),
             locaux(numero)
           )
-        ''').eq('statut', 'En attente').order('date_echeance', ascending: true);
+        ''')
+          .eq('statut', 'En attente')
+          .order('date_echeance', ascending: true);
 
       return List<Map<String, dynamic>>.from(paiements);
     } catch (e) {

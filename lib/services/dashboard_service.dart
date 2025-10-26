@@ -24,24 +24,20 @@ class DashboardService {
       print(
           '📊 Locaux - Total: $total, Occupés: $occupes, Disponibles: $disponibles');
 
-      // 2. RÉCUPÉRATION DE TOUS LES PAIEMENTS
+      // 2. RÉCUPÉRATION DE TOUS LES PAIEMENTS - SUPABASE INTÉGRATION RÉELLE
       final paiementsResponse = await _supabase.from('paiements').select('*');
 
       print('📊 Total paiements récupérés: ${paiementsResponse.length}');
 
-      // 3. CALCUL DES ENCAISSEMENTS ET IMPAYÉS - VERSION CORRIGÉE
+      // 3. CALCUL DES ENCAISSEMENTS ET IMPAYÉS - VERSION CORRIGÉE AVEC DONNÉES RÉELLES
       final aujourdhui = DateTime.now();
-
-      // Définir les périodes pour les calculs
       final debutJour =
           DateTime(aujourdhui.year, aujourdhui.month, aujourdhui.day);
       final debutSemaine =
           aujourdhui.subtract(Duration(days: aujourdhui.weekday - 1));
       final debutMois = DateTime(aujourdhui.year, aujourdhui.month, 1);
-      final il7Jours = aujourdhui.subtract(Duration(days: 7));
-      final il30Jours = aujourdhui.subtract(Duration(days: 30));
 
-      // Variables pour les calculs
+      // Variables pour les calculs - RESET DES VALEURS RÉELLES
       double encaissementsJour = 0.0;
       double encaissementsSemaine = 0.0;
       double encaissementsMois = 0.0;
@@ -49,7 +45,7 @@ class DashboardService {
       double impayes = 0.0;
       Set<String> bailsImpayes = {};
 
-      // Analyser tous les paiements
+      // Analyser tous les paiements avec les DONNÉES RÉELLES DE SUPABASE
       for (var p in paiementsResponse) {
         final montant = (p['montant'] as num?)?.toDouble() ?? 0.0;
         final statut = p['statut']?.toString() ?? '';
@@ -58,7 +54,7 @@ class DashboardService {
         print(
             '💰 Analysing payment: montant=$montant, statut=$statut, date=$datePaiementStr');
 
-        // ENCAISSEMENTS - Statut "Payé" exact
+        // ENCAISSEMENTS - Statut "Payé" exact avec vérification de la date réelle
         if (statut == 'Payé') {
           totalEncaissements += montant;
 
@@ -66,31 +62,33 @@ class DashboardService {
             try {
               final datePaiement = DateTime.parse(datePaiementStr);
 
-              // Encaissements du jour (aujourd'hui)
-              if (datePaiement.isAfter(debutJour) ||
-                  (datePaiement.year == debutJour.year &&
-                      datePaiement.month == debutJour.month &&
-                      datePaiement.day == debutJour.day)) {
+              // Encaissements du jour (aujourd'hui) - VÉRIFICATION EXACTE DE LA DATE
+              if (datePaiement.year == debutJour.year &&
+                  datePaiement.month == debutJour.month &&
+                  datePaiement.day == debutJour.day) {
                 encaissementsJour += montant;
+                print('✅ Paiement du jour ajouté: $montant FCFA');
               }
 
               // Encaissements de la semaine
-              if (datePaiement.isAfter(debutSemaine)) {
+              if (datePaiement.isAfter(debutSemaine) ||
+                  (datePaiement.year == debutSemaine.year &&
+                      datePaiement.month == debutSemaine.month &&
+                      datePaiement.day == debutSemaine.day)) {
                 encaissementsSemaine += montant;
               }
 
               // Encaissements du mois
-              if (datePaiement.isAfter(debutMois)) {
+              if (datePaiement.isAfter(debutMois) ||
+                  (datePaiement.year == debutMois.year &&
+                      datePaiement.month == debutMois.month &&
+                      datePaiement.day == debutMois.day)) {
                 encaissementsMois += montant;
               }
             } catch (e) {
               print('❌ Erreur parsing date: $datePaiementStr - $e');
-              // Si erreur de parsing, compter dans le total quand même
-              encaissementsMois += montant;
+              // En cas d'erreur de parsing, ne pas compter dans les encaissements du jour
             }
-          } else {
-            // Paiement payé mais sans date spécifique, compter dans le mois
-            encaissementsMois += montant;
           }
         }
 
@@ -104,72 +102,15 @@ class DashboardService {
         }
       }
 
-      // LOGIQUE DE FALLBACK INTELLIGENTE
-      // Si pas d'encaissements récents, utiliser les données historiques
-      if (encaissementsJour == 0.0 && totalEncaissements > 0) {
-        print(
-            '⚠️ Aucun encaissement aujourd\'hui, calcul avec données historiques');
+      // SUPPRESSION DE LA LOGIQUE DE FALLBACK - AFFICHAGE DES DONNÉES RÉELLES
+      // Plus de calculs estimés - on affiche les vrais montants de Supabase
 
-        // Fallback 1: Moyenne quotidienne des 30 derniers jours avec des paiements
-        double encaissements30Jours = 0.0;
-        int joursAvecPaiements = 0;
-        Set<String> joursUniques = {};
-
-        for (var p in paiementsResponse) {
-          final statut = p['statut']?.toString() ?? '';
-          final datePaiementStr = p['date_paiement']?.toString();
-          final montant = (p['montant'] as num?)?.toDouble() ?? 0.0;
-
-          if (statut == 'Payé' && datePaiementStr != null) {
-            try {
-              final datePaiement = DateTime.parse(datePaiementStr);
-              if (datePaiement.isAfter(il30Jours)) {
-                encaissements30Jours += montant;
-                final jourKey =
-                    '${datePaiement.year}-${datePaiement.month}-${datePaiement.day}';
-                joursUniques.add(jourKey);
-              }
-            } catch (e) {
-              // Ignore les erreurs de parsing pour le fallback
-            }
-          }
-        }
-
-        joursAvecPaiements = joursUniques.length;
-
-        if (joursAvecPaiements > 0) {
-          double moyenneJour = encaissements30Jours / joursAvecPaiements;
-          encaissementsJour = moyenneJour;
-          print(
-              '📊 Fallback jour: Moyenne de ${moyenneJour.toStringAsFixed(0)} FCFA/jour sur $joursAvecPaiements jours');
-        } else {
-          // Fallback 2: 5% du total des encaissements
-          encaissementsJour = totalEncaissements * 0.05;
-          print(
-              '📊 Fallback jour: 5% du total = ${encaissementsJour.toStringAsFixed(0)} FCFA');
-        }
-      }
-
-      // Si pas d'encaissements semaine, utiliser une portion du total
-      if (encaissementsSemaine == 0.0 && totalEncaissements > 0) {
-        encaissementsSemaine = totalEncaissements * 0.15; // 15% du total
-        print(
-            '📊 Fallback semaine: 15% du total = ${encaissementsSemaine.toStringAsFixed(0)} FCFA');
-      }
-
-      // Si pas d'encaissements mois, utiliser une portion du total
-      if (encaissementsMois == 0.0 && totalEncaissements > 0) {
-        encaissementsMois = totalEncaissements * 0.4; // 40% du total
-        print(
-            '📊 Fallback mois: 40% du total = ${encaissementsMois.toStringAsFixed(0)} FCFA');
-      }
-
-      // LOG FINAL DES RÉSULTATS
-      print('💵 RÉSULTATS FINAUX:');
+      // LOG FINAL DES RÉSULTATS RÉELS
+      print('💵 RÉSULTATS FINAUX RÉELS (SANS FALLBACK):');
       print(
           '💵 Total encaissements: ${totalEncaissements.toStringAsFixed(0)} FCFA');
       print(
-          '💵 Encaissements jour: ${encaissementsJour.toStringAsFixed(0)} FCFA');
+          '💵 Encaissements jour (aujourd\'hui): ${encaissementsJour.toStringAsFixed(0)} FCFA');
       print(
           '💵 Encaissements semaine: ${encaissementsSemaine.toStringAsFixed(0)} FCFA');
       print(
@@ -188,7 +129,7 @@ class DashboardService {
         disponibles: disponibles,
         inactifs: inactifs,
         tauxOccupation: tauxOccupation,
-        encaissementsJour: encaissementsJour,
+        encaissementsJour: encaissementsJour, // VALEUR RÉELLE SANS FALLBACK
         encaissementsSemaine: encaissementsSemaine,
         encaissementsMois: encaissementsMois,
         impayes: impayes,

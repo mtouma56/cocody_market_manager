@@ -58,7 +58,7 @@ class _PaymentSearchBarState extends State<PaymentSearchBar> {
                 controller: _searchController,
                 onChanged: widget.onSearchChanged,
                 decoration: InputDecoration(
-                  hintText: 'Rechercher par commerçant, montant...',
+                  hintText: 'Rechercher par commerçant, local, date...',
                   hintStyle: GoogleFonts.roboto(
                     fontSize: 12.sp,
                     fontWeight: FontWeight.w400,
