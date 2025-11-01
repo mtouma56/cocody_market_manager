@@ -7,6 +7,7 @@ import '../../core/app_export.dart';
 import '../../services/merchants_service.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/custom_bottom_bar.dart';
+import '../../widgets/unified_drawer.dart';
 import '../lease_management_screen/lease_management_screen.dart';
 import '../payments_management_screen/payments_management_screen.dart';
 import './widgets/add_merchant_bottom_sheet_widget.dart';
@@ -154,8 +155,8 @@ class _MerchantsManagementScreenState extends State<MerchantsManagementScreen> {
                 _performDeleteMerchant(merchant);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.alertRed,
-                foregroundColor: AppTheme.surfaceWhite,
+                backgroundColor: AppTheme.error,
+                foregroundColor: AppTheme.surface,
               ),
               child: const Text('Supprimer'),
             ),
@@ -495,117 +496,7 @@ class _MerchantsManagementScreenState extends State<MerchantsManagementScreen> {
               variant: CustomAppBarVariant.withActions,
               onSearchPressed: _toggleSearch,
             ),
-      drawer: Drawer(
-        backgroundColor: AppTheme.lightTheme.colorScheme.surface,
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                color: AppTheme.lightTheme.colorScheme.primary,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CustomIconWidget(
-                    iconName: 'business',
-                    color: AppTheme.lightTheme.colorScheme.onPrimary,
-                    size: 40,
-                  ),
-                  SizedBox(height: 1.h),
-                  Text(
-                    'Cocody Market Manager',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: AppTheme.lightTheme.colorScheme.onPrimary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  Text(
-                    'Gestion des commerçants',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppTheme.lightTheme.colorScheme.onPrimary
-                              .withValues(alpha: 0.8),
-                        ),
-                  ),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: CustomIconWidget(
-                iconName: 'dashboard',
-                color: AppTheme.lightTheme.colorScheme.onSurface,
-                size: 24,
-              ),
-              title: const Text('Tableau de bord'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/dashboard-screen');
-              },
-            ),
-            ListTile(
-              leading: CustomIconWidget(
-                iconName: 'business',
-                color: AppTheme.lightTheme.colorScheme.onSurface,
-                size: 24,
-              ),
-              title: const Text('Locaux'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/properties-management-screen');
-              },
-            ),
-            ListTile(
-              leading: CustomIconWidget(
-                iconName: 'store',
-                color: AppTheme.lightTheme.colorScheme.secondary,
-                size: 24,
-              ),
-              title: const Text('Commerçants'),
-              selected: true,
-              selectedTileColor: AppTheme.lightTheme.colorScheme.secondary
-                  .withValues(alpha: 0.1),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: CustomIconWidget(
-                iconName: 'description',
-                color: AppTheme.lightTheme.colorScheme.onSurface,
-                size: 24,
-              ),
-              title: const Text('Baux'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/lease-management-screen');
-              },
-            ),
-            ListTile(
-              leading: CustomIconWidget(
-                iconName: 'payment',
-                color: AppTheme.lightTheme.colorScheme.onSurface,
-                size: 24,
-              ),
-              title: const Text('Paiements'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/payments-management-screen');
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: CustomIconWidget(
-                iconName: 'settings',
-                color: AppTheme.lightTheme.colorScheme.onSurface,
-                size: 24,
-              ),
-              title: const Text('Paramètres'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/settings-screen');
-              },
-            ),
-          ],
-        ),
-      ),
+      drawer: UnifiedDrawer(currentRoute: AppRoutes.merchantsManagementScreen),
       body: _isLoading
           ? _buildLoadingState()
           : _error != null

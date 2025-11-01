@@ -7,6 +7,292 @@ class PropertiesService {
 
   final _supabase = Supabase.instance.client;
 
+  /// Récupère tous les locaux avec les informations complètes
+  Future<List<Map<String, dynamic>>> _getAllPropertiesBasic() async {
+    try {
+      final response = await _supabase.from('locaux').select('''
+            *,
+            etages!inner(
+              nom,
+              ordre
+            ),
+            types_locaux!inner(
+              nom,
+              surface_m2
+            )
+          ''').eq('actif', true).order('numero');
+
+      // Transform data for UI consumption
+      List<Map<String, dynamic>> properties = [];
+      for (var local in response) {
+        properties.add({
+          'id': local['id'],
+          'numero': local['numero'],
+          'statut': local['statut'],
+          'type': _getPropertyTypeFromNom(local['types_locaux']['nom']),
+          'type_nom': local['types_locaux']['nom'],
+          'surface': local['types_locaux']['surface_m2'],
+          'etage': _getFloorFromOrdre(local['etages']['ordre']),
+          'etage_nom': local['etages']['nom'],
+          'actif': local['actif'],
+          'created_at': local['created_at'],
+          'urgency': _determineUrgency(local['statut']),
+        });
+      }
+
+      print('✅ Récupération de ${properties.length} locaux depuis Supabase');
+      return properties;
+    } catch (error) {
+      print('❌ ERREUR getAllProperties: $error');
+      throw Exception('Erreur lors de la récupération des locaux: $error');
+    }
+  }
+
+  /// Récupère les locaux par type
+  Future<List<Map<String, dynamic>>> getPropertiesByType(
+      String typeFilter) async {
+    try {
+      if (typeFilter == 'all') {
+        return await _getAllPropertiesBasic();
+      }
+
+      // Map filter to actual database values
+      String? typeNom = _getTypeNomFromFilter(typeFilter);
+
+      if (typeNom == null) {
+        return await _getAllPropertiesBasic();
+      }
+
+      final response = await _supabase
+          .from('locaux')
+          .select('''
+            *,
+            etages!inner(
+              nom,
+              ordre
+            ),
+            types_locaux!inner(
+              nom,
+              surface_m2
+            )
+          ''')
+          .eq('actif', true)
+          .eq('types_locaux.nom', typeNom)
+          .order('numero');
+
+      List<Map<String, dynamic>> properties = [];
+      for (var local in response) {
+        properties.add({
+          'id': local['id'],
+          'numero': local['numero'],
+          'statut': local['statut'],
+          'type': _getPropertyTypeFromNom(local['types_locaux']['nom']),
+          'type_nom': local['types_locaux']['nom'],
+          'surface': local['types_locaux']['surface_m2'],
+          'etage': _getFloorFromOrdre(local['etages']['ordre']),
+          'etage_nom': local['etages']['nom'],
+          'actif': local['actif'],
+          'created_at': local['created_at'],
+          'urgency': _determineUrgency(local['statut']),
+        });
+      }
+
+      print('✅ Récupération de ${properties.length} locaux de type $typeNom');
+      return properties;
+    } catch (error) {
+      print('❌ ERREUR getPropertiesByType: $error');
+      throw Exception('Erreur lors du filtrage par type: $error');
+    }
+  }
+
+  /// Récupère les détails d'un local spécifique
+  Future<Map<String, dynamic>> _getPropertyDetailsBasic(String propertyId) async {
+    try {
+      final response = await _supabase.from('locaux').select('''
+            *,
+            etages!inner(
+              nom,
+              ordre
+            ),
+            types_locaux!inner(
+              nom,
+              surface_m2
+            )
+          ''').eq('id', propertyId).single();
+
+      return {
+        'id': response['id'],
+        'numero': response['numero'],
+        'statut': response['statut'],
+        'type': _getPropertyTypeFromNom(response['types_locaux']['nom']),
+        'type_nom': response['types_locaux']['nom'],
+        'surface': response['types_locaux']['surface_m2'],
+        'etage': _getFloorFromOrdre(response['etages']['ordre']),
+        'etage_nom': response['etages']['nom'],
+        'actif': response['actif'],
+        'created_at': response['created_at'],
+        'urgency': _determineUrgency(response['statut']),
+      };
+    } catch (error) {
+      print('❌ ERREUR getPropertyDetails: $error');
+      throw Exception('Erreur lors de la récupération du local: $error');
+    }
+  }
+
+  /// Récupère les types de locaux disponibles
+  Future<List<Map<String, dynamic>>> getPropertyTypes() async {
+    try {
+      final response = await _supabase
+          .from('types_locaux')
+          .select('*')
+          .eq('actif', true)
+          .order('nom');
+
+      print('✅ Récupération de ${response.length} types de locaux');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (error) {
+      print('❌ ERREUR getPropertyTypes: $error');
+      throw Exception('Erreur lors de la récupération des types: $error');
+    }
+  }
+
+  /// Récupère les étages disponibles
+  Future<List<Map<String, dynamic>>> getFloors() async {
+    try {
+      final response = await _supabase
+          .from('etages')
+          .select('*')
+          .eq('actif', true)
+          .order('ordre');
+
+      print('✅ Récupération de ${response.length} étages');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (error) {
+      print('❌ ERREUR getFloors: $error');
+      throw Exception('Erreur lors de la récupération des étages: $error');
+    }
+  }
+
+  /// Crée un nouveau local
+  Future<Map<String, dynamic>> createProperty({
+    required String numero,
+    required String typeId,
+    required String etageId,
+    String statut = 'Disponible',
+  }) async {
+    try {
+      final response = await _supabase.from('locaux').insert({
+        'numero': numero,
+        'type_id': typeId,
+        'etage_id': etageId,
+        'statut': statut,
+        'actif': true,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }).select('''
+            *,
+            etages!inner(
+              nom,
+              ordre
+            ),
+            types_locaux!inner(
+              nom,
+              surface_m2
+            )
+          ''').single();
+
+      print('✅ Local créé avec succès: ${response['numero']}');
+      return response;
+    } catch (error) {
+      print('❌ ERREUR createProperty: $error');
+      throw Exception('Erreur lors de la création du local: $error');
+    }
+  }
+
+  /// Met à jour un local
+  Future<Map<String, dynamic>> updateProperty({
+    required String propertyId,
+    required String numero,
+    required String typeId,
+    required String etageId,
+    required String statut,
+  }) async {
+    try {
+      final response = await _supabase
+          .from('locaux')
+          .update({
+            'numero': numero,
+            'type_id': typeId,
+            'etage_id': etageId,
+            'statut': statut,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', propertyId)
+          .select('''
+            *,
+            etages!inner(
+              nom,
+              ordre
+            ),
+            types_locaux!inner(
+              nom,
+              surface_m2
+            )
+          ''')
+          .single();
+
+      print('✅ Local mis à jour avec succès: ${response['numero']}');
+      return response;
+    } catch (error) {
+      print('❌ ERREUR updateProperty: $error');
+      throw Exception('Erreur lors de la mise à jour du local: $error');
+    }
+  }
+
+  /// Supprime un local (soft delete)
+  Future<void> deleteProperty(String propertyId) async {
+    try {
+      await _supabase.from('locaux').update({
+        'actif': false,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', propertyId);
+
+      print('✅ Local supprimé avec succès: $propertyId');
+    } catch (error) {
+      print('❌ ERREUR deleteProperty: $error');
+      throw Exception('Erreur lors de la suppression du local: $error');
+    }
+  }
+
+  /// Récupère les statistiques des locaux
+  Future<Map<String, dynamic>> getPropertiesStats() async {
+    try {
+      final response = await _supabase.from('locaux').select('*');
+
+      final total = response.length;
+      final occupes = response.where((l) => l['statut'] == 'Occupé').length;
+      final disponibles =
+          response.where((l) => l['statut'] == 'Disponible').length;
+      final maintenance =
+          response.where((l) => l['statut'] == 'Maintenance').length;
+      final inactifs = response.where((l) => l['actif'] == false).length;
+
+      final tauxOccupation = total > 0 ? (occupes / total) * 100 : 0.0;
+
+      return {
+        'total': total,
+        'occupes': occupes,
+        'disponibles': disponibles,
+        'maintenance': maintenance,
+        'inactifs': inactifs,
+        'tauxOccupation': tauxOccupation,
+      };
+    } catch (error) {
+      print('❌ ERREUR getPropertiesStats: $error');
+      throw Exception('Erreur lors du calcul des statistiques: $error');
+    }
+  }
+
   /// Crée un nouveau local dans Supabase
   Future<Map<String, dynamic>> createLocal({
     required String numero,
@@ -132,38 +418,6 @@ class PropertiesService {
       print('❌ ERREUR deleteLocal: $e');
       print('Stack trace: $stackTrace');
       rethrow;
-    }
-  }
-
-  /// Récupère les types de locaux disponibles
-  Future<List<Map<String, dynamic>>> getPropertyTypes() async {
-    try {
-      final response = await _supabase
-          .from('types_locaux')
-          .select('*')
-          .eq('actif', true)
-          .order('nom');
-
-      return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      print('❌ ERREUR getPropertyTypes: $e');
-      throw Exception('Erreur lors de la récupération des types: $e');
-    }
-  }
-
-  /// Récupère les étages disponibles
-  Future<List<Map<String, dynamic>>> getFloors() async {
-    try {
-      final response = await _supabase
-          .from('etages')
-          .select('*')
-          .eq('actif', true)
-          .order('ordre');
-
-      return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      print('❌ ERREUR getFloors: $e');
-      throw Exception('Erreur lors de la récupération des étages: $e');
     }
   }
 
@@ -673,6 +927,77 @@ class PropertiesService {
         return 'Maintenance';
       default:
         return 'Inconnu';
+    }
+  }
+
+  // Helper methods
+
+  String _getPropertyTypeFromNom(String? nom) {
+    final safeNom = nom ?? '';
+    switch (safeNom) {
+      case 'Boutique 9m²':
+        return '9m2_shop';
+      case 'Boutique 4.5m²':
+        return '4.5m2_shop';
+      case 'Restaurant':
+        return 'restaurant';
+      case 'Banque':
+        return 'bank';
+      case 'Box':
+        return 'box';
+      case 'Étal':
+        return 'market_stall';
+      default:
+        return '9m2_shop';
+    }
+  }
+
+  String? _getTypeNomFromFilter(String filter) {
+    switch (filter) {
+      case '9m2_shop':
+        return 'Boutique 9m²';
+      case '4.5m2_shop':
+        return 'Boutique 4.5m²';
+      case 'restaurant':
+        return 'Restaurant';
+      case 'bank':
+        return 'Banque';
+      case 'box':
+        return 'Box';
+      case 'market_stall':
+        return 'Étal';
+      default:
+        return null;
+    }
+  }
+
+  String _getFloorFromOrdre(int? ordre) {
+    final safeOrdre = ordre ?? 0;
+    switch (safeOrdre) {
+      case 0:
+        return 'rdc';
+      case 1:
+        return '1er';
+      case 2:
+        return '2eme';
+      case 3:
+        return '3eme';
+      default:
+        return 'rdc';
+    }
+  }
+
+  String _determineUrgency(String? statut) {
+    final safeStatut = statut ?? '';
+    switch (safeStatut) {
+      case 'Maintenance':
+        return 'high';
+      case 'Disponible':
+        return 'low';
+      case 'Occupé':
+        return 'medium';
+      default:
+        return 'low';
     }
   }
 }

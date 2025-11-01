@@ -11,14 +11,17 @@ class LeasesService {
   bool _isValidUUID(String? uuid) {
     if (uuid == null || uuid.isEmpty) return false;
     final uuidRegExp = RegExp(
-        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+    );
     return uuidRegExp.hasMatch(uuid);
   }
 
   /// Récupère tous les baux avec toutes les informations nécessaires
   Future<List<Map<String, dynamic>>> getAllLeases() async {
     try {
-      final response = await _supabase.from('baux').select('''
+      final response = await _supabase
+          .from('baux')
+          .select('''
         id,
         numero_contrat,
         statut,
@@ -41,7 +44,9 @@ class LeasesService {
           etages!inner(nom, ordre),
           types_locaux!inner(nom, surface_m2)
         )
-      ''').eq('actif', true).order('date_debut', ascending: false);
+      ''')
+          .eq('actif', true)
+          .order('date_debut', ascending: false);
 
       List<Map<String, dynamic>> leases = [];
 
@@ -76,7 +81,8 @@ class LeasesService {
           'status': _getStatusCode(bail['statut']),
           'urgency': urgency,
           'nextPaymentDate': nextPayment.toIso8601String().split('T')[0],
-          'tenantProfilePhoto': bail['commercants']['photo_url'] ??
+          'tenantProfilePhoto':
+              bail['commercants']['photo_url'] ??
               'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=400',
           'tenantProfilePhotoSemanticLabel':
               'Photo de profil de ${bail['commercants']['nom']}, locataire du local ${bail['locaux']['numero']}',
@@ -94,12 +100,14 @@ class LeasesService {
 
   /// Récupère les baux par commerçant (avec validation UUID)
   Future<List<Map<String, dynamic>>> getLeasesByMerchant(
-      String? merchantId) async {
+    String? merchantId,
+  ) async {
     try {
       // ✅ VALIDATION: Vérifie si l'UUID du commerçant est valide
       if (!_isValidUUID(merchantId)) {
         print(
-            '⚠️ UUID commerçant invalide: $merchantId - Retour de tous les baux');
+          '⚠️ UUID commerçant invalide: $merchantId - Retour de tous les baux',
+        );
         return await getAllLeases();
       }
 
@@ -136,8 +144,10 @@ class LeasesService {
         )
       ''')
           .eq('actif', true)
-          .eq('commercant_id',
-              merchantId) // ✅ Maintenant sûr d'utiliser un UUID valide
+          .eq(
+            'commercant_id',
+            merchantId,
+          ) // ✅ Maintenant sûr d'utiliser un UUID valide
           .order('date_debut', ascending: false);
 
       List<Map<String, dynamic>> leases = [];
@@ -170,7 +180,8 @@ class LeasesService {
           'status': _getStatusCode(bail['statut']),
           'urgency': urgency,
           'nextPaymentDate': nextPayment.toIso8601String().split('T')[0],
-          'tenantProfilePhoto': bail['commercants']['photo_url'] ??
+          'tenantProfilePhoto':
+              bail['commercants']['photo_url'] ??
               'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=400',
           'tenantProfilePhotoSemanticLabel':
               'Photo de profil de ${bail['commercants']['nom']}, locataire du local ${bail['locaux']['numero']}',
@@ -179,7 +190,8 @@ class LeasesService {
       }
 
       print(
-          '✅ Récupération de ${leases.length} baux pour le commerçant $merchantId');
+        '✅ Récupération de ${leases.length} baux pour le commerçant $merchantId',
+      );
       return leases;
     } catch (error) {
       print('❌ ERREUR getLeasesByMerchant: $error');
@@ -189,7 +201,8 @@ class LeasesService {
 
   /// Récupère les baux expirant dans les N prochains jours
   Future<List<Map<String, dynamic>>> getExpiringLeases(
-      int daysUntilExpiry) async {
+    int daysUntilExpiry,
+  ) async {
     try {
       final limitDate = DateTime.now().add(Duration(days: daysUntilExpiry));
 
@@ -200,16 +213,18 @@ class LeasesService {
             numero_contrat,
             date_debut,
             date_fin,
-            loyer_mensuel,
+            montant_loyer,
             statut,
             commercants!inner(
               id,
               nom,
-              telephone
+              contact
             ),
             locaux!inner(
               id,
-              numero
+              numero,
+              etages!inner(nom),
+              types_locaux!inner(nom)
             )
           ''')
           .eq('statut', 'Actif')
@@ -233,15 +248,18 @@ class LeasesService {
       if (supabaseStatus == 'Résilié') {
         await _supabase
             .from('baux')
-            .update({'statut': supabaseStatus}).eq('id', leaseId);
+            .update({'statut': supabaseStatus})
+            .eq('id', leaseId);
 
         print('✅ Bail $leaseId résilié manuellement');
       } else {
         // ✅ Pour les autres statuts, laisser le trigger automatique faire le calcul
         print(
-            '⚠️ Statut automatique - Les statuts Actif/Expiré/Expire bientôt sont gérés automatiquement par la base de données');
+          '⚠️ Statut automatique - Les statuts Actif/Expiré/Expire bientôt sont gérés automatiquement par la base de données',
+        );
         throw Exception(
-            'Les statuts automatiques ne peuvent pas être modifiés manuellement. Utilisez updateBail() pour modifier les dates.');
+          'Les statuts automatiques ne peuvent pas être modifiés manuellement. Utilisez updateBail() pour modifier les dates.',
+        );
       }
     } catch (error) {
       print('❌ ERREUR updateLeaseStatus: $error');
@@ -284,7 +302,8 @@ class LeasesService {
 
     // Vérification de l'expiration dans les 60 jours ou paiement dans 7 jours
     if (endDate.difference(now).inDays <= 60 ||
-        nextPayment.difference(now).inDays <= 7) return 'medium';
+        nextPayment.difference(now).inDays <= 7)
+      return 'medium';
 
     return 'low';
   }
@@ -364,14 +383,19 @@ class LeasesService {
   /// Récupère les locaux disponibles pour les baux
   Future<List<Map<String, dynamic>>> getAvailableProperties() async {
     try {
-      final response = await _supabase.from('locaux').select('''
+      final response = await _supabase
+          .from('locaux')
+          .select('''
             id,
             numero,
             statut,
             actif,
             etages!inner(nom, ordre),
             types_locaux!inner(nom, surface_m2)
-          ''').eq('statut', 'Disponible').eq('actif', true).order('numero');
+          ''')
+          .eq('statut', 'Disponible')
+          .eq('actif', true)
+          .order('numero');
 
       print('✅ Récupération de ${response.length} locaux disponibles');
       return List<Map<String, dynamic>>.from(response);
@@ -451,11 +475,12 @@ class LeasesService {
       print('🚀 Création bail: $contractNumber pour local $propertyId');
 
       // 1. Vérifie que le local est disponible
-      final propertyResponse = await _supabase
-          .from('locaux')
-          .select('statut, numero')
-          .eq('id', propertyId)
-          .single();
+      final propertyResponse =
+          await _supabase
+              .from('locaux')
+              .select('statut, numero')
+              .eq('id', propertyId)
+              .single();
 
       if (propertyResponse['statut'] != 'Disponible') {
         throw Exception('Ce local n\'est pas disponible');
@@ -501,10 +526,13 @@ class LeasesService {
           ''').single();
 
       // 4. Met à jour le statut du local à "Occupé"
-      await _supabase.from('locaux').update({
-        'statut': 'Occupé',
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', propertyId);
+      await _supabase
+          .from('locaux')
+          .update({
+            'statut': 'Occupé',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', propertyId);
 
       // 5. Log des informations de création
       print('✅ Bail créé avec succès: $contractNumber');
@@ -534,11 +562,16 @@ class LeasesService {
       }
 
       // Infos bail complet
-      final bail = await _supabase.from('baux').select('''
+      final bail =
+          await _supabase
+              .from('baux')
+              .select('''
         *,
         locaux!inner(*, types_locaux(*), etages(*)),
         commercants(*)
-      ''').eq('id', bailId).single();
+      ''')
+              .eq('id', bailId)
+              .single();
 
       // Ses paiements
       final paiements = await _supabase
@@ -556,11 +589,12 @@ class LeasesService {
 
       // Calcule le montant attendu en tenant compte des modifications
       double montantAttendu = 0;
-      final totalPaye =
-          paiements.where((p) => p['statut'] == 'Payé').fold<double>(
-                0,
-                (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
-              );
+      final totalPaye = paiements
+          .where((p) => p['statut'] == 'Payé')
+          .fold<double>(
+            0,
+            (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
+          );
 
       // Logique améliorée pour le calcul du montant attendu
       // Si les paiements existants couvrent déjà une période, on les considère comme valides
@@ -585,11 +619,12 @@ class LeasesService {
         montantAttendu = totalPaye;
       }
 
-      final enRetard =
-          paiements.where((p) => p['statut'] == 'En retard').fold<double>(
-                0,
-                (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
-              );
+      final enRetard = paiements
+          .where((p) => p['statut'] == 'En retard')
+          .fold<double>(
+            0,
+            (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
+          );
 
       // Calcul du taux de paiement avec logique améliorée
       double tauxPaiement = 0.0;
@@ -641,26 +676,28 @@ class LeasesService {
     try {
       // ✅ IMPORTANT: NE PAS mettre à jour le champ 'statut'
       // Le trigger Supabase le calculera automatiquement lors de l'UPDATE
-      final response = await _supabase
-          .from('baux')
-          .update({
-            'date_debut': dateDebut,
-            'date_fin': dateFin,
-            'montant_loyer': montantLoyer,
-            'montant_caution': caution,
-            'montant_pas_de_porte': pasDePorte,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', bailId)
-          .select('''
+      final response =
+          await _supabase
+              .from('baux')
+              .update({
+                'date_debut': dateDebut,
+                'date_fin': dateFin,
+                'montant_loyer': montantLoyer,
+                'montant_caution': caution,
+                'montant_pas_de_porte': pasDePorte,
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', bailId)
+              .select('''
             *,
             locaux!inner(*, types_locaux(*), etages(*)),
             commercants(*)
           ''')
-          .single();
+              .single();
 
       print(
-          '✅ Bail $bailId mis à jour avec succès - Statut recalculé automatiquement');
+        '✅ Bail $bailId mis à jour avec succès - Statut recalculé automatiquement',
+      );
       return response;
     } catch (e) {
       print('❌ ERREUR updateBail: $e');
@@ -672,26 +709,33 @@ class LeasesService {
   Future<Map<String, dynamic>> resilierBail(String bailId) async {
     try {
       // Récupère le bail
-      final bail = await _supabase
-          .from('baux')
-          .select('local_id')
-          .eq('id', bailId)
-          .single();
+      final bail =
+          await _supabase
+              .from('baux')
+              .select('local_id')
+              .eq('id', bailId)
+              .single();
 
       final localId = bail['local_id'];
 
       // Met à jour le bail en "Résilié"
-      await _supabase.from('baux').update({
-        'statut': 'Résilié',
-        'date_fin': DateTime.now().toIso8601String().split('T')[0],
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', bailId);
+      await _supabase
+          .from('baux')
+          .update({
+            'statut': 'Résilié',
+            'date_fin': DateTime.now().toIso8601String().split('T')[0],
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', bailId);
 
       // Met le local en "Disponible"
-      await _supabase.from('locaux').update({
-        'statut': 'Disponible',
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', localId);
+      await _supabase
+          .from('locaux')
+          .update({
+            'statut': 'Disponible',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', localId);
 
       print('✅ Bail $bailId résilié et local $localId libéré');
       return {'success': true};

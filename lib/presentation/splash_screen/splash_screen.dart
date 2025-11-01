@@ -56,9 +56,9 @@ class _SplashScreenState extends State<SplashScreen>
       // Set system UI overlay style
       SystemChrome.setSystemUIOverlayStyle(
         const SystemUiOverlayStyle(
-          statusBarColor: AppTheme.primaryGreen,
+          statusBarColor: AppTheme.primary,
           statusBarIconBrightness: Brightness.light,
-          systemNavigationBarColor: AppTheme.primaryGreen,
+          systemNavigationBarColor: AppTheme.primary,
           systemNavigationBarIconBrightness: Brightness.light,
         ),
       );
@@ -173,8 +173,8 @@ class _SplashScreenState extends State<SplashScreen>
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              AppTheme.primaryGreen,
-              AppTheme.successAccent,
+              AppTheme.primary,
+              AppTheme.success,
             ],
           ),
         ),
@@ -230,11 +230,11 @@ class _SplashScreenState extends State<SplashScreen>
       width: 25.w,
       height: 25.w,
       decoration: BoxDecoration(
-        color: AppTheme.surfaceWhite,
+        color: AppTheme.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neutralDark.withValues(alpha: 0.2),
+            color: AppTheme.textPrimary.withValues(alpha: 0.2),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -246,14 +246,14 @@ class _SplashScreenState extends State<SplashScreen>
           children: [
             CustomIconWidget(
               iconName: 'store',
-              color: AppTheme.primaryGreen,
+              color: AppTheme.primary,
               size: 8.w,
             ),
             SizedBox(height: 1.h),
             Text(
               'MCM',
               style: AppTheme.lightTheme.textTheme.titleMedium?.copyWith(
-                color: AppTheme.primaryGreen,
+                color: AppTheme.primary,
                 fontWeight: FontWeight.bold,
                 fontSize: 12.sp,
               ),
@@ -270,7 +270,7 @@ class _SplashScreenState extends State<SplashScreen>
         Text(
           'Marché Cocody',
           style: AppTheme.lightTheme.textTheme.headlineMedium?.copyWith(
-            color: AppTheme.surfaceWhite,
+            color: AppTheme.surface,
             fontWeight: FontWeight.bold,
             fontSize: 18.sp,
           ),
@@ -280,7 +280,7 @@ class _SplashScreenState extends State<SplashScreen>
         Text(
           'Saint Jean',
           style: AppTheme.lightTheme.textTheme.titleLarge?.copyWith(
-            color: AppTheme.surfaceWhite.withValues(alpha: 0.9),
+            color: AppTheme.surface.withValues(alpha: 0.9),
             fontWeight: FontWeight.w500,
             fontSize: 16.sp,
           ),
@@ -290,7 +290,7 @@ class _SplashScreenState extends State<SplashScreen>
         Text(
           'Gestionnaire de Location',
           style: AppTheme.lightTheme.textTheme.bodyMedium?.copyWith(
-            color: AppTheme.surfaceWhite.withValues(alpha: 0.8),
+            color: AppTheme.surface.withValues(alpha: 0.8),
             fontSize: 12.sp,
           ),
           textAlign: TextAlign.center,
@@ -306,9 +306,9 @@ class _SplashScreenState extends State<SplashScreen>
       child: CircularProgressIndicator(
         strokeWidth: 2.5,
         valueColor: AlwaysStoppedAnimation<Color>(
-          AppTheme.surfaceWhite.withValues(alpha: 0.9),
+          AppTheme.surface.withValues(alpha: 0.9),
         ),
-        backgroundColor: AppTheme.surfaceWhite.withValues(alpha: 0.3),
+        backgroundColor: AppTheme.surface.withValues(alpha: 0.3),
       ),
     );
   }
@@ -320,7 +320,7 @@ class _SplashScreenState extends State<SplashScreen>
         _loadingText,
         key: ValueKey(_loadingText),
         style: AppTheme.lightTheme.textTheme.bodyMedium?.copyWith(
-          color: AppTheme.surfaceWhite.withValues(alpha: 0.9),
+          color: AppTheme.surface.withValues(alpha: 0.9),
           fontSize: 11.sp,
         ),
         textAlign: TextAlign.center,

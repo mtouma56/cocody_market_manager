@@ -69,7 +69,6 @@ class _PropertiesManagementScreenState
       String sortBy = _convertSortOptionToApi(_currentSort);
 
       final properties = await _propertiesService.getAllProperties(
-        statusFilters: apiStatusFilters,
         sortBy: sortBy,
         ascending: _sortAscending,
       );

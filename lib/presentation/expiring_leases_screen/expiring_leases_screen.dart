@@ -44,7 +44,7 @@ class _ExpiringLeasesScreenState extends State<ExpiringLeasesScreen> {
       appBar: CustomAppBar(
         title: "Baux expirant bientôt",
         centerTitle: true,
-        backgroundColor: AppTheme.primaryGreen,
+        backgroundColor: AppTheme.primary,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -261,8 +261,8 @@ class _ExpiringLeasesScreenState extends State<ExpiringLeasesScreen> {
                     icon: const Icon(Icons.visibility, size: 18),
                     label: const Text('Voir détails'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.primaryBlue,
-                      side: BorderSide(color: AppTheme.primaryBlue),
+                      foregroundColor: AppTheme.primary,
+                      side: BorderSide(color: AppTheme.primary),
                     ),
                   ),
                 ),

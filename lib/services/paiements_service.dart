@@ -661,7 +661,10 @@ class PaiementsService {
           commercant_id,
           montant_loyer,
           statut,
-          locaux(numero, type_local),
+          locaux!inner(
+            numero,
+            types_locaux!inner(nom)
+          ),
           commercants(nom)
         ''')
           .eq('statut', 'Actif') // ← FILTRE ESSENTIEL

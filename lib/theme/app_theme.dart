@@ -1,710 +1,418 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// A class that contains all theme configurations for the commercial property management application.
+/// Modern Material 3 theme for commercial property management application.
 class AppTheme {
   AppTheme._();
 
-  // Structured Business Palette - Functional color indicators for property management
-  static const Color primaryGreen =
-      Color(0xFF4CAF50); // Confirmation actions and positive status
-  static const Color primaryBlue =
-      Color(0xFF2196F3); // Navigation and informational content
-  static const Color alertRed =
-      Color(0xFFF44336); // Critical actions and overdue payments
-  static const Color neutralDark =
-      Color(0xFF212121); // Primary text and essential UI elements
-  static const Color neutralMedium =
-      Color(0xFF757575); // Secondary text and subtle components
-  static const Color neutralLight =
-      Color(0xFFFAFAFA); // Background surfaces and card containers
-  static const Color successAccent =
-      Color(0xFF66BB6A); // Completed payments and active leases
-  static const Color warningAccent =
-      Color(0xFFFF9800); // Pending actions and upcoming deadlines
-  static const Color infoAccent =
-      Color(0xFF42A5F5); // Property details and informational badges
-  static const Color surfaceWhite =
-      Color(0xFFFFFFFF); // Card surfaces and modal backgrounds
+  // MODERN COLOR PALETTE - Professional green theme
+  static const Color primary = Color(0xFF2E7D32); // Professional green
+  static const Color secondary = Color(0xFF66BB6A); // Green accent
+  static const Color error = Color(0xFFD32F2F); // Red
+  static const Color warning = Color(0xFFF57C00); // Orange
+  static const Color success = Color(0xFF388E3C); // Dark green
+  static const Color background = Color(0xFFF5F5F5); // Very light gray
+  static const Color surface = Color(0xFFFFFFFF); // White
 
-  // Dark theme variants
-  static const Color primaryGreenDark = Color(0xFF66BB6A);
-  static const Color primaryBlueDark = Color(0xFF42A5F5);
-  static const Color alertRedDark = Color(0xFFEF5350);
-  static const Color neutralDarkDark = Color(0xFFE0E0E0);
-  static const Color neutralMediumDark = Color(0xFFBDBDBD);
-  static const Color neutralLightDark = Color(0xFF121212);
-  static const Color successAccentDark = Color(0xFF81C784);
-  static const Color warningAccentDark = Color(0xFFFFB74D);
-  static const Color infoAccentDark = Color(0xFF64B5F6);
-  static const Color surfaceWhiteDark = Color(0xFF1E1E1E);
+  // Gradient colors for AppBar and special cards
+  static const Color gradientStart = Color(0xFF1B5E20); // Dark green
+  static const Color gradientEnd = Color(0xFF43A047); // Medium green
 
-  // Shadow and divider colors
-  static const Color shadowLight = Color(0x0A000000);
-  static const Color shadowDark = Color(0x0AFFFFFF);
-  static const Color dividerLight = Color(0x1F757575);
-  static const Color dividerDark = Color(0x1FBDBDBD);
+  // Text colors
+  static const Color textPrimary = Color(0xFF212121);
+  static const Color textSecondary = Color(0xFF757575);
+  static const Color textLabel = Color(0xFF9E9E9E);
 
-  /// Light theme optimized for commercial property management
+  // Shadow and effect colors
+  static const Color shadowColor = Color(0x1A000000);
+  static const Color glassmorphismOverlay = Color(0x0DFFFFFF);
+
+  /// Light theme with modern Material 3 design
   static ThemeData lightTheme = ThemeData(
+    useMaterial3: true,
     brightness: Brightness.light,
-    colorScheme: ColorScheme(
-      brightness: Brightness.light,
-      primary: primaryGreen,
-      onPrimary: surfaceWhite,
-      primaryContainer: successAccent,
-      onPrimaryContainer: neutralDark,
-      secondary: primaryBlue,
-      onSecondary: surfaceWhite,
-      secondaryContainer: infoAccent,
-      onSecondaryContainer: neutralDark,
-      tertiary: warningAccent,
-      onTertiary: neutralDark,
-      tertiaryContainer: warningAccent.withValues(alpha: 0.2),
-      onTertiaryContainer: neutralDark,
-      error: alertRed,
-      onError: surfaceWhite,
-      surface: surfaceWhite,
-      onSurface: neutralDark,
-      onSurfaceVariant: neutralMedium,
-      outline: dividerLight,
-      outlineVariant: neutralLight,
-      shadow: shadowLight,
-      scrim: neutralDark.withValues(alpha: 0.5),
-      inverseSurface: neutralDark,
-      onInverseSurface: surfaceWhite,
-      inversePrimary: primaryGreenDark,
-    ),
-    scaffoldBackgroundColor: neutralLight,
-    cardColor: surfaceWhite,
-    dividerColor: dividerLight,
 
-    // AppBar theme for property management headers
+    colorScheme: ColorScheme.light(
+      primary: primary,
+      onPrimary: surface,
+      primaryContainer: Color(0xFFE8F5E8),
+      onPrimaryContainer: primary,
+      secondary: secondary,
+      onSecondary: surface,
+      secondaryContainer: Color(0xFFE8F5E8),
+      onSecondaryContainer: textPrimary,
+      tertiary: warning,
+      onTertiary: surface,
+      error: error,
+      onError: surface,
+      errorContainer: Color(0xFFFFEBEE),
+      onErrorContainer: error,
+      surface: surface,
+      onSurface: textPrimary,
+      surfaceContainerHighest: Color(0xFFF8F9FA),
+      onSurfaceVariant: textSecondary,
+      outline: Color(0xFFE0E0E0),
+      outlineVariant: Color(0xFFF0F0F0),
+      shadow: shadowColor,
+      scrim: Color(0x80000000),
+    ),
+
+    scaffoldBackgroundColor: background,
+
+    // Modern AppBar with gradient
     appBarTheme: AppBarTheme(
-      backgroundColor: surfaceWhite,
-      foregroundColor: neutralDark,
-      elevation: 1.0,
-      shadowColor: shadowLight,
-      titleTextStyle: GoogleFonts.roboto(
-        fontSize: 20,
-        fontWeight: FontWeight.w500,
-        color: neutralDark,
-        letterSpacing: 0.15,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      backgroundColor: Colors.transparent,
+      foregroundColor: surface,
+      centerTitle: false,
+      titleTextStyle: GoogleFonts.inter(
+        fontSize: 28,
+        fontWeight: FontWeight.bold,
+        color: surface,
+        letterSpacing: -0.5,
       ),
-      iconTheme: const IconThemeData(
-        color: neutralDark,
-        size: 24,
-      ),
+      iconTheme: IconThemeData(color: surface, size: 24),
+      actionsIconTheme: IconThemeData(color: surface, size: 24),
     ),
 
-    // Card theme for property and tenant information
+    // Modern card theme with elevated design
     cardTheme: CardTheme(
-      color: surfaceWhite,
-      elevation: 2.0,
-      shadowColor: shadowLight,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8.0),
-      ),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      elevation: 2,
+      shadowColor: shadowColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: surface,
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
     ),
 
-    // Bottom navigation for main property management sections
-    bottomNavigationBarTheme: BottomNavigationBarThemeData(
-      backgroundColor: surfaceWhite,
-      selectedItemColor: primaryBlue,
-      unselectedItemColor: neutralMedium,
-      elevation: 3.0,
-      type: BottomNavigationBarType.fixed,
-      selectedLabelStyle: GoogleFonts.roboto(
-        fontSize: 12,
-        fontWeight: FontWeight.w500,
-      ),
-      unselectedLabelStyle: GoogleFonts.roboto(
-        fontSize: 12,
-        fontWeight: FontWeight.w400,
-      ),
-    ),
-
-    // Floating action button for quick property actions
-    floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: primaryGreen,
-      foregroundColor: surfaceWhite,
-      elevation: 3.0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(16)),
-      ),
-    ),
-
-    // Button themes for property management actions
+    // Modern elevated button theme
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        foregroundColor: surfaceWhite,
-        backgroundColor: primaryGreen,
-        elevation: 2.0,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        textStyle: GoogleFonts.roboto(
+        elevation: 2,
+        shadowColor: shadowColor,
+        backgroundColor: primary,
+        foregroundColor: surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        textStyle: GoogleFonts.inter(
           fontSize: 14,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 1.25,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
         ),
       ),
     ),
 
+    // Modern outlined button theme
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: primaryBlue,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        side: const BorderSide(color: primaryBlue, width: 1),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        textStyle: GoogleFonts.roboto(
+        foregroundColor: primary,
+        side: BorderSide(color: primary, width: 1.5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        textStyle: GoogleFonts.inter(
           fontSize: 14,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 1.25,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
         ),
       ),
     ),
 
+    // Modern text button theme
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: primaryBlue,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        textStyle: GoogleFonts.roboto(
+        foregroundColor: primary,
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: GoogleFonts.inter(
           fontSize: 14,
           fontWeight: FontWeight.w500,
-          letterSpacing: 1.25,
+          letterSpacing: 0.25,
         ),
       ),
     ),
 
-    // Typography for property management content
-    textTheme: _buildTextTheme(isLight: true),
+    // Modern floating action button
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      elevation: 3,
+      backgroundColor: primary,
+      foregroundColor: surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    ),
 
-    // Input decoration for property data entry
+    // Modern input decoration theme
     inputDecorationTheme: InputDecorationTheme(
-      fillColor: surfaceWhite,
       filled: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      fillColor: surface,
+      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8.0),
-        borderSide: const BorderSide(color: dividerLight, width: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Color(0xFFE0E0E0), width: 1),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8.0),
-        borderSide: const BorderSide(color: dividerLight, width: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Color(0xFFE0E0E0), width: 1),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8.0),
-        borderSide: const BorderSide(color: primaryBlue, width: 2.0),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: primary, width: 2),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8.0),
-        borderSide: const BorderSide(color: alertRed, width: 1.0),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: error, width: 1),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8.0),
-        borderSide: const BorderSide(color: alertRed, width: 2.0),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: error, width: 2),
       ),
-      labelStyle: GoogleFonts.openSans(
-        fontSize: 16,
-        fontWeight: FontWeight.w400,
-        color: neutralMedium,
-      ),
-      hintStyle: GoogleFonts.openSans(
-        fontSize: 16,
-        fontWeight: FontWeight.w300,
-        color: neutralMedium,
-      ),
-    ),
-
-    // Switch theme for property status toggles
-    switchTheme: SwitchThemeData(
-      thumbColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) {
-          return primaryGreen;
-        }
-        return neutralMedium;
-      }),
-      trackColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) {
-          return primaryGreen.withValues(alpha: 0.5);
-        }
-        return neutralMedium.withValues(alpha: 0.3);
-      }),
-    ),
-
-    // Checkbox theme for property selections
-    checkboxTheme: CheckboxThemeData(
-      fillColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) {
-          return primaryGreen;
-        }
-        return Colors.transparent;
-      }),
-      checkColor: WidgetStateProperty.all(surfaceWhite),
-      side: const BorderSide(color: neutralMedium, width: 2),
-    ),
-
-    // Radio theme for property type selections
-    radioTheme: RadioThemeData(
-      fillColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) {
-          return primaryGreen;
-        }
-        return neutralMedium;
-      }),
-    ),
-
-    // Progress indicator for data loading
-    progressIndicatorTheme: const ProgressIndicatorThemeData(
-      color: primaryBlue,
-      linearTrackColor: neutralLight,
-      circularTrackColor: neutralLight,
-    ),
-
-    // Slider theme for property value ranges
-    sliderTheme: SliderThemeData(
-      activeTrackColor: primaryBlue,
-      thumbColor: primaryBlue,
-      overlayColor: primaryBlue.withValues(alpha: 0.2),
-      inactiveTrackColor: neutralLight,
-      valueIndicatorColor: primaryBlue,
-    ),
-
-    // Tab bar theme for property categories
-    tabBarTheme: TabBarTheme(
-      labelColor: primaryBlue,
-      unselectedLabelColor: neutralMedium,
-      indicatorColor: primaryBlue,
-      indicatorSize: TabBarIndicatorSize.label,
-      labelStyle: GoogleFonts.roboto(
+      labelStyle: GoogleFonts.inter(
         fontSize: 14,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.normal,
+        color: textSecondary,
       ),
-      unselectedLabelStyle: GoogleFonts.roboto(
+      hintStyle: GoogleFonts.inter(
         fontSize: 14,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.normal,
+        color: textLabel,
       ),
     ),
 
-    // Tooltip theme for property information
-    tooltipTheme: TooltipThemeData(
-      decoration: BoxDecoration(
-        color: neutralDark.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      textStyle: GoogleFonts.roboto(
-        color: surfaceWhite,
-        fontSize: 12,
-        fontWeight: FontWeight.w400,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    ),
+    // Modern text theme with Inter typography
+    textTheme: _buildModernTextTheme(),
 
-    // SnackBar theme for property management notifications
-    snackBarTheme: SnackBarThemeData(
-      backgroundColor: neutralDark,
-      contentTextStyle: GoogleFonts.roboto(
-        color: surfaceWhite,
-        fontSize: 14,
-        fontWeight: FontWeight.w400,
-      ),
-      actionTextColor: primaryGreen,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8.0),
-      ),
-      elevation: 3.0,
-    ), dialogTheme: DialogThemeData(backgroundColor: surfaceWhite),
-  );
-
-  /// Dark theme optimized for property management in low-light conditions
-  static ThemeData darkTheme = ThemeData(
-    brightness: Brightness.dark,
-    colorScheme: ColorScheme(
-      brightness: Brightness.dark,
-      primary: primaryGreenDark,
-      onPrimary: neutralDarkDark,
-      primaryContainer: successAccentDark,
-      onPrimaryContainer: neutralLightDark,
-      secondary: primaryBlueDark,
-      onSecondary: neutralDarkDark,
-      secondaryContainer: infoAccentDark,
-      onSecondaryContainer: neutralLightDark,
-      tertiary: warningAccentDark,
-      onTertiary: neutralLightDark,
-      tertiaryContainer: warningAccentDark.withValues(alpha: 0.2),
-      onTertiaryContainer: neutralDarkDark,
-      error: alertRedDark,
-      onError: neutralLightDark,
-      surface: surfaceWhiteDark,
-      onSurface: neutralDarkDark,
-      onSurfaceVariant: neutralMediumDark,
-      outline: dividerDark,
-      outlineVariant: neutralMediumDark,
-      shadow: shadowDark,
-      scrim: neutralLightDark.withValues(alpha: 0.5),
-      inverseSurface: neutralDarkDark,
-      onInverseSurface: neutralLightDark,
-      inversePrimary: primaryGreen,
-    ),
-    scaffoldBackgroundColor: neutralLightDark,
-    cardColor: surfaceWhiteDark,
-    dividerColor: dividerDark,
-
-    // AppBar theme for dark mode
-    appBarTheme: AppBarTheme(
-      backgroundColor: surfaceWhiteDark,
-      foregroundColor: neutralDarkDark,
-      elevation: 1.0,
-      shadowColor: shadowDark,
-      titleTextStyle: GoogleFonts.roboto(
-        fontSize: 20,
-        fontWeight: FontWeight.w500,
-        color: neutralDarkDark,
-        letterSpacing: 0.15,
-      ),
-      iconTheme: const IconThemeData(
-        color: neutralDarkDark,
-        size: 24,
-      ),
-    ),
-
-    // Card theme for dark mode
-    cardTheme: CardTheme(
-      color: surfaceWhiteDark,
-      elevation: 2.0,
-      shadowColor: shadowDark,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8.0),
-      ),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-    ),
-
-    // Bottom navigation for dark mode
+    // Modern bottom navigation bar
     bottomNavigationBarTheme: BottomNavigationBarThemeData(
-      backgroundColor: surfaceWhiteDark,
-      selectedItemColor: primaryBlueDark,
-      unselectedItemColor: neutralMediumDark,
-      elevation: 3.0,
+      backgroundColor: surface,
+      selectedItemColor: primary,
+      unselectedItemColor: textSecondary,
+      elevation: 8,
       type: BottomNavigationBarType.fixed,
-      selectedLabelStyle: GoogleFonts.roboto(
+      selectedLabelStyle: GoogleFonts.inter(
         fontSize: 12,
         fontWeight: FontWeight.w500,
       ),
-      unselectedLabelStyle: GoogleFonts.roboto(
+      unselectedLabelStyle: GoogleFonts.inter(
         fontSize: 12,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.normal,
       ),
     ),
 
-    // Floating action button for dark mode
-    floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: primaryGreenDark,
-      foregroundColor: neutralLightDark,
-      elevation: 3.0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(16)),
+    // Modern snackbar theme
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: textPrimary,
+      contentTextStyle: GoogleFonts.inter(
+        color: surface,
+        fontSize: 14,
+        fontWeight: FontWeight.normal,
+      ),
+      actionTextColor: secondary,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 3,
+    ),
+
+    // Modern dialog theme
+    dialogTheme: DialogTheme(
+      backgroundColor: surface,
+      elevation: 8,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      titleTextStyle: GoogleFonts.inter(
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+      ),
+      contentTextStyle: GoogleFonts.inter(
+        fontSize: 14,
+        fontWeight: FontWeight.normal,
+        color: textSecondary,
       ),
     ),
 
-    // Button themes for dark mode
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        foregroundColor: neutralLightDark,
-        backgroundColor: primaryGreenDark,
-        elevation: 2.0,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        textStyle: GoogleFonts.roboto(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 1.25,
-        ),
-      ),
-    ),
-
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: primaryBlueDark,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        side: const BorderSide(color: primaryBlueDark, width: 1),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        textStyle: GoogleFonts.roboto(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 1.25,
-        ),
-      ),
-    ),
-
-    textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(
-        foregroundColor: primaryBlueDark,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        textStyle: GoogleFonts.roboto(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 1.25,
-        ),
-      ),
-    ),
-
-    // Typography for dark mode
-    textTheme: _buildTextTheme(isLight: false),
-
-    // Input decoration for dark mode
-    inputDecorationTheme: InputDecorationTheme(
-      fillColor: surfaceWhiteDark,
-      filled: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8.0),
-        borderSide: const BorderSide(color: dividerDark, width: 0.5),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8.0),
-        borderSide: const BorderSide(color: dividerDark, width: 0.5),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8.0),
-        borderSide: const BorderSide(color: primaryBlueDark, width: 2.0),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8.0),
-        borderSide: const BorderSide(color: alertRedDark, width: 1.0),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8.0),
-        borderSide: const BorderSide(color: alertRedDark, width: 2.0),
-      ),
-      labelStyle: GoogleFonts.openSans(
-        fontSize: 16,
-        fontWeight: FontWeight.w400,
-        color: neutralMediumDark,
-      ),
-      hintStyle: GoogleFonts.openSans(
-        fontSize: 16,
-        fontWeight: FontWeight.w300,
-        color: neutralMediumDark,
-      ),
-    ),
-
-    // Switch theme for dark mode
+    // Modern switch theme
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) {
-          return primaryGreenDark;
-        }
-        return neutralMediumDark;
+        if (states.contains(WidgetState.selected)) return primary;
+        return textSecondary;
       }),
       trackColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) {
-          return primaryGreenDark.withValues(alpha: 0.5);
-        }
-        return neutralMediumDark.withValues(alpha: 0.3);
+        if (states.contains(WidgetState.selected))
+          return primary.withAlpha(128);
+        return textLabel.withAlpha(77);
       }),
     ),
 
-    // Checkbox theme for dark mode
+    // Modern checkbox theme
     checkboxTheme: CheckboxThemeData(
       fillColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) {
-          return primaryGreenDark;
-        }
+        if (states.contains(WidgetState.selected)) return primary;
         return Colors.transparent;
       }),
-      checkColor: WidgetStateProperty.all(neutralLightDark),
-      side: const BorderSide(color: neutralMediumDark, width: 2),
+      checkColor: WidgetStateProperty.all(surface),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
     ),
 
-    // Radio theme for dark mode
-    radioTheme: RadioThemeData(
-      fillColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) {
-          return primaryGreenDark;
-        }
-        return neutralMediumDark;
-      }),
+    // Modern progress indicator
+    progressIndicatorTheme: ProgressIndicatorThemeData(
+      color: primary,
+      linearTrackColor: primary.withAlpha(51),
+      circularTrackColor: primary.withAlpha(51),
     ),
 
-    // Progress indicator for dark mode
-    progressIndicatorTheme: const ProgressIndicatorThemeData(
-      color: primaryBlueDark,
-      linearTrackColor: neutralMediumDark,
-      circularTrackColor: neutralMediumDark,
+    // Modern divider theme
+    dividerTheme: DividerThemeData(
+      color: Color(0xFFE0E0E0),
+      thickness: 1,
+      space: 1,
     ),
-
-    // Slider theme for dark mode
-    sliderTheme: SliderThemeData(
-      activeTrackColor: primaryBlueDark,
-      thumbColor: primaryBlueDark,
-      overlayColor: primaryBlueDark.withValues(alpha: 0.2),
-      inactiveTrackColor: neutralMediumDark,
-      valueIndicatorColor: primaryBlueDark,
-    ),
-
-    // Tab bar theme for dark mode
-    tabBarTheme: TabBarTheme(
-      labelColor: primaryBlueDark,
-      unselectedLabelColor: neutralMediumDark,
-      indicatorColor: primaryBlueDark,
-      indicatorSize: TabBarIndicatorSize.label,
-      labelStyle: GoogleFonts.roboto(
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-      ),
-      unselectedLabelStyle: GoogleFonts.roboto(
-        fontSize: 14,
-        fontWeight: FontWeight.w400,
-      ),
-    ),
-
-    // Tooltip theme for dark mode
-    tooltipTheme: TooltipThemeData(
-      decoration: BoxDecoration(
-        color: neutralDarkDark.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      textStyle: GoogleFonts.roboto(
-        color: neutralLightDark,
-        fontSize: 12,
-        fontWeight: FontWeight.w400,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    ),
-
-    // SnackBar theme for dark mode
-    snackBarTheme: SnackBarThemeData(
-      backgroundColor: neutralDarkDark,
-      contentTextStyle: GoogleFonts.roboto(
-        color: neutralLightDark,
-        fontSize: 14,
-        fontWeight: FontWeight.w400,
-      ),
-      actionTextColor: primaryGreenDark,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8.0),
-      ),
-      elevation: 3.0,
-    ), dialogTheme: DialogThemeData(backgroundColor: surfaceWhiteDark),
   );
 
-  /// Helper method to build text theme based on brightness for property management
-  static TextTheme _buildTextTheme({required bool isLight}) {
-    final Color textPrimary = isLight ? neutralDark : neutralDarkDark;
-    final Color textSecondary = isLight ? neutralMedium : neutralMediumDark;
-
+  /// Modern text theme with clear hierarchy
+  static TextTheme _buildModernTextTheme() {
     return TextTheme(
-      // Display styles for property headers and titles
-      displayLarge: GoogleFonts.roboto(
-        fontSize: 57,
-        fontWeight: FontWeight.w400,
+      // Main titles - fontSize: 28, fontWeight: FontWeight.bold
+      headlineLarge: GoogleFonts.inter(
+        fontSize: 28,
+        fontWeight: FontWeight.bold,
         color: textPrimary,
-        letterSpacing: -0.25,
-      ),
-      displayMedium: GoogleFonts.roboto(
-        fontSize: 45,
-        fontWeight: FontWeight.w400,
-        color: textPrimary,
-      ),
-      displaySmall: GoogleFonts.roboto(
-        fontSize: 36,
-        fontWeight: FontWeight.w400,
-        color: textPrimary,
+        letterSpacing: -0.5,
+        height: 1.2,
       ),
 
-      // Headline styles for property names and section headers
-      headlineLarge: GoogleFonts.roboto(
+      // Important amounts - fontSize: 32, fontWeight: FontWeight.w700
+      headlineMedium: GoogleFonts.inter(
         fontSize: 32,
         fontWeight: FontWeight.w700,
         color: textPrimary,
-      ),
-      headlineMedium: GoogleFonts.roboto(
-        fontSize: 28,
-        fontWeight: FontWeight.w700,
-        color: textPrimary,
-      ),
-      headlineSmall: GoogleFonts.roboto(
-        fontSize: 24,
-        fontWeight: FontWeight.w400,
-        color: textPrimary,
+        letterSpacing: -0.8,
+        height: 1.1,
       ),
 
-      // Title styles for property cards and tenant information
-      titleLarge: GoogleFonts.roboto(
-        fontSize: 22,
-        fontWeight: FontWeight.w700,
+      // Card titles - fontSize: 20, fontWeight: FontWeight.w600
+      headlineSmall: GoogleFonts.inter(
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+        letterSpacing: -0.2,
+        height: 1.3,
+      ),
+
+      // Subtitles - fontSize: 16, fontWeight: FontWeight.w600
+      titleLarge: GoogleFonts.inter(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
         color: textPrimary,
         letterSpacing: 0,
-      ),
-      titleMedium: GoogleFonts.roboto(
-        fontSize: 16,
-        fontWeight: FontWeight.w500,
-        color: textPrimary,
-        letterSpacing: 0.15,
-      ),
-      titleSmall: GoogleFonts.roboto(
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-        color: textPrimary,
-        letterSpacing: 0.1,
+        height: 1.4,
       ),
 
-      // Body styles for property descriptions and lease details
-      bodyLarge: GoogleFonts.openSans(
-        fontSize: 16,
-        fontWeight: FontWeight.w400,
-        color: textPrimary,
-        letterSpacing: 0.5,
-      ),
-      bodyMedium: GoogleFonts.openSans(
+      // Section titles
+      titleMedium: GoogleFonts.inter(
         fontSize: 14,
-        fontWeight: FontWeight.w400,
-        color: textPrimary,
-        letterSpacing: 0.25,
-      ),
-      bodySmall: GoogleFonts.openSans(
-        fontSize: 12,
-        fontWeight: FontWeight.w300,
-        color: textSecondary,
-        letterSpacing: 0.4,
-      ),
-
-      // Label styles for property codes, dates, and status indicators
-      labelLarge: GoogleFonts.roboto(
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
         color: textPrimary,
         letterSpacing: 0.1,
+        height: 1.4,
       ),
-      labelMedium: GoogleFonts.roboto(
+
+      // Small titles
+      titleSmall: GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+        letterSpacing: 0.2,
+        height: 1.4,
+      ),
+
+      // Body text - fontSize: 14, fontWeight: FontWeight.normal
+      bodyLarge: GoogleFonts.inter(
+        fontSize: 14,
+        fontWeight: FontWeight.normal,
+        color: textPrimary,
+        letterSpacing: 0.1,
+        height: 1.5,
+      ),
+
+      // Secondary body text
+      bodyMedium: GoogleFonts.inter(
+        fontSize: 13,
+        fontWeight: FontWeight.normal,
+        color: textSecondary,
+        letterSpacing: 0.1,
+        height: 1.4,
+      ),
+
+      // Small body text
+      bodySmall: GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: FontWeight.normal,
+        color: textSecondary,
+        letterSpacing: 0.2,
+        height: 1.4,
+      ),
+
+      // Labels - fontSize: 12, fontWeight: FontWeight.w500
+      labelLarge: GoogleFonts.inter(
         fontSize: 12,
         fontWeight: FontWeight.w500,
-        color: textSecondary,
-        letterSpacing: 0.5,
+        color: textLabel,
+        letterSpacing: 0.3,
+        height: 1.3,
       ),
-      labelSmall: GoogleFonts.roboto(
+
+      // Small labels
+      labelMedium: GoogleFonts.inter(
         fontSize: 11,
-        fontWeight: FontWeight.w400,
-        color: textSecondary,
-        letterSpacing: 0.5,
+        fontWeight: FontWeight.w500,
+        color: textLabel,
+        letterSpacing: 0.3,
+        height: 1.3,
+      ),
+
+      // Tiny labels
+      labelSmall: GoogleFonts.inter(
+        fontSize: 10,
+        fontWeight: FontWeight.w500,
+        color: textLabel,
+        letterSpacing: 0.4,
+        height: 1.2,
       ),
     );
   }
+
+  // Helper method to create gradient for AppBar
+  static LinearGradient get appBarGradient => LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [gradientStart, gradientEnd],
+  );
+
+  // Helper method to create glassmorphism effect
+  static BoxDecoration get glassmorphismDecoration => BoxDecoration(
+    borderRadius: BorderRadius.circular(16),
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [glassmorphismOverlay, glassmorphismOverlay.withAlpha(13)],
+    ),
+    border: Border.all(color: glassmorphismOverlay, width: 1),
+  );
+
+  // Helper method for modern card shadow
+  static List<BoxShadow> get modernCardShadow => [
+    BoxShadow(
+      color: shadowColor,
+      blurRadius: 8,
+      offset: Offset(0, 2),
+      spreadRadius: 0,
+    ),
+  ];
+
+  // Helper method for elevated card shadow
+  static List<BoxShadow> get elevatedCardShadow => [
+    BoxShadow(
+      color: shadowColor,
+      blurRadius: 12,
+      offset: Offset(0, 4),
+      spreadRadius: 0,
+    ),
+  ];
 }

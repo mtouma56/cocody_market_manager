@@ -49,7 +49,7 @@ class PropertyCardWidget extends StatelessWidget {
           ),
           SlidableAction(
             onPressed: (context) => onEditStatus?.call(),
-            backgroundColor: AppTheme.warningAccent,
+            backgroundColor: AppTheme.warning,
             foregroundColor: AppTheme.lightTheme.colorScheme.onTertiary,
             icon: Icons.edit,
             label: 'Modifier',
@@ -90,7 +90,7 @@ class PropertyCardWidget extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.shadowLight,
+                color: AppTheme.shadowColor,
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -309,7 +309,7 @@ class PropertyCardWidget extends StatelessWidget {
             ListTile(
               leading: CustomIconWidget(
                 iconName: 'edit',
-                color: AppTheme.warningAccent,
+                color: AppTheme.warning,
                 size: 24,
               ),
               title: const Text('Modifier le statut'),

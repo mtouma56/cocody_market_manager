@@ -430,7 +430,7 @@ class _AddMerchantBottomSheetWidgetState
             SnackBar(
               content:
                   Text('Commerçant "${merchantData['name']}" créé avec succès'),
-              backgroundColor: AppTheme.primaryGreen,
+              backgroundColor: AppTheme.success,
             ),
           );
         }

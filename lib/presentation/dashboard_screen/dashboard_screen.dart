@@ -2,7 +2,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:percent_indicator/percent_indicator.dart';
-import 'package:sizer/sizer.dart';
 
 import '../../models/dashboard_stats.dart';
 import '../../routes/app_routes.dart';
@@ -14,7 +13,7 @@ import '../../services/notification_service.dart';
 import '../../services/paiements_service.dart';
 import '../../services/rapport_service.dart';
 import '../../services/sync_service.dart';
-import '../../widgets/custom_app_bar.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/custom_bottom_bar.dart';
 import '../../widgets/notification_badge.dart';
 import '../documents_screen/documents_screen.dart';
@@ -26,12 +25,19 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with TickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final DashboardService _dashboardService = DashboardService();
   final PaiementsService _paiementsService = PaiementsService();
   final RapportService _rapportService = RapportService();
   final _validationService = BailValidationService();
+
+  // Animation controllers for modern micro-animations
+  late AnimationController _fadeController;
+  late AnimationController _scaleController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
 
   // Nouveaux services pour mode hors ligne
   final _connectivity = ConnectivityService();
@@ -51,24 +57,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _initializeAnimations();
     _initializeOfflineMode();
     _loadData();
-    _verifierConflits(); // Vérification au démarrage
+    _verifierConflits();
+  }
+
+  void _initializeAnimations() {
+    _fadeController = AnimationController(
+      duration: Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _scaleController = AnimationController(
+      duration: Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.95, end: 1.0).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.elasticOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    _scaleController.dispose();
+    super.dispose();
   }
 
   /// Initialise le mode hors ligne
   Future<void> _initializeOfflineMode() async {
     try {
-      // Initialiser le cache
       await _cache.initialize();
-
-      // Initialiser la connectivité
       await _connectivity.initialize();
-
-      // Initialiser la synchronisation
       _sync.initialize();
 
-      // Sync initiale si en ligne
       if (_connectivity.isOnline) {
         _sync.syncAll();
       }
@@ -87,58 +114,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.warning, color: Colors.orange, size: 32),
-                SizedBox(width: 12),
-                Text('Alerte système'),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '⚠️ ${conflits.length} locaux ont plusieurs baux actifs.',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 12),
-                Text(
-                  'Ceci est une erreur critique qui nécessite une intervention immédiate.',
-                  style: TextStyle(fontSize: 13),
-                ),
-                SizedBox(height: 8),
-                ...conflits.map((c) => Text(
-                      '• ${c['local_numero']} : ${c['nb_baux_actifs']} baux actifs',
-                      style: TextStyle(fontSize: 12, color: Colors.red),
-                    )),
-                SizedBox(height: 16),
-                Row(
+          builder:
+              (context) => AlertDialog(
+                title: Row(
                   children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          await _resoudreConflitsAutomatiquement();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: Text('Résoudre automatiquement'),
+                    Icon(Icons.warning, color: AppTheme.warning, size: 32),
+                    SizedBox(width: 12),
+                    Text('Alerte système'),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '⚠️ ${conflits.length} locaux ont plusieurs baux actifs.',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      'Ceci est une erreur critique qui nécessite une intervention immédiate.',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    SizedBox(height: 8),
+                    ...conflits.map(
+                      (c) => Text(
+                        '• ${c['local_numero']} : ${c['nb_baux_actifs']} baux actifs',
+                        style: TextStyle(fontSize: 12, color: AppTheme.error),
                       ),
+                    ),
+                    SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              Navigator.pop(context);
+                              await _resoudreConflitsAutomatiquement();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.warning,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: Text('Résoudre automatiquement'),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('Ignorer pour maintenant'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('Ignorer pour maintenant'),
+                  ),
+                ],
               ),
-            ],
-          ),
         );
       }
     } catch (e) {
@@ -151,57 +181,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => Center(
-          child: Card(
-            child: Padding(
-              padding: EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Résolution des conflits en cours...'),
-                ],
+        builder:
+            (context) => Center(
+              child: Container(
+                padding: EdgeInsets.all(24),
+                margin: EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: AppTheme.elevatedCardShadow,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: AppTheme.primary),
+                    SizedBox(height: 20),
+                    Text(
+                      'Résolution des conflits en cours...',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ),
       );
 
       final resolutions = await _validationService.resoudreConflits();
-
-      Navigator.pop(context); // Fermer le dialog de chargement
+      Navigator.pop(context);
 
       showDialog(
         context: context,
-        builder: (context) => AlertDialog(
-          title: Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.green, size: 32),
-              SizedBox(width: 12),
-              Text('Conflits résolus'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '✅ ${resolutions.length} conflits ont été résolus automatiquement.',
-                style: TextStyle(fontWeight: FontWeight.bold),
+        builder:
+            (context) => AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.check_circle, color: AppTheme.success, size: 32),
+                  SizedBox(width: 12),
+                  Text('Conflits résolus'),
+                ],
               ),
-              SizedBox(height: 12),
-              if (resolutions.isNotEmpty) ...[
-                Text('Détails des résolutions :'),
-                SizedBox(height: 8),
-                ...resolutions.map((r) => Padding(
-                      padding: EdgeInsets.only(bottom: 8),
-                      child: Container(
-                        padding: EdgeInsets.all(8),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '✅ ${resolutions.length} conflits ont été résolus automatiquement.',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 12),
+                  if (resolutions.isNotEmpty) ...[
+                    Text('Détails des résolutions :'),
+                    SizedBox(height: 8),
+                    ...resolutions.map(
+                      (r) => Container(
+                        margin: EdgeInsets.only(bottom: 8),
+                        padding: EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.green.shade200),
+                          color: AppTheme.success.withAlpha(26),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppTheme.success.withAlpha(77),
+                          ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -214,41 +254,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             if (r['baux_resilies'] != null &&
                                 r['baux_resilies'].isNotEmpty)
                               Text(
-                                  'Baux résiliés: ${(r['baux_resilies'] as List).join(', ')}'),
+                                'Baux résiliés: ${(r['baux_resilies'] as List).join(', ')}',
+                              ),
                           ],
                         ),
                       ),
-                    )),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _loadData();
+                  },
+                  child: Text('OK'),
+                ),
               ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _loadData(); // Recharger les données
-              },
-              child: Text('OK'),
             ),
-          ],
-        ),
       );
     } catch (e) {
-      Navigator.pop(context); // Fermer le dialog de chargement
-
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Erreur'),
-          content: Text('Impossible de résoudre les conflits: $e'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('OK'),
-            ),
-          ],
-        ),
-      );
+      Navigator.pop(context);
+      _showErrorDialog('Impossible de résoudre les conflits: $e');
     }
   }
 
@@ -259,7 +287,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _errorMessage = null;
       });
 
-      // Load all dashboard data in parallel for better performance
       final results = await Future.wait([
         _dashboardService.getDashboardStats(),
         _dashboardService.getOccupationParEtage(),
@@ -276,6 +303,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _statsEtages = results[4] as Map<String, Map<String, dynamic>>;
         _isLoading = false;
       });
+
+      // Start animations after data is loaded
+      _fadeController.forward();
+      _scaleController.forward();
     } catch (error) {
       setState(() {
         _isLoading = false;
@@ -288,135 +319,743 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: Colors.grey[50],
-      appBar: CustomAppBar(
-        title: 'Dashboard',
-        variant: CustomAppBarVariant.standard,
-        leading: IconButton(
-          icon: const Icon(Icons.menu, color: Colors.white),
-          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-        ),
-        actions: [
-          // NOTIFICATION BADGE - Badge notifications dans AppBar
-          NotificationBadge(),
-          SizedBox(width: 8),
-          // NOUVEAU BOUTON - Génération automatique des paiements
-          IconButton(
-            icon: const Icon(Icons.auto_fix_high, color: Colors.white),
-            tooltip: 'Générer paiements du mois',
-            onPressed: _genererPaiementsMois,
-          ),
-          // NOUVEAU BOUTON - Synchronisation manuelle
-          IconButton(
-            icon: const Icon(Icons.sync, color: Colors.white),
-            tooltip: 'Synchroniser manuellement',
-            onPressed: _syncManuelle,
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // PARTIE 1 - 4 WIDGETS PRINCIPAUX (Grid 2x2)
-                  _buildMainWidgets(),
-                  SizedBox(height: 6.w),
-
-                  const SizedBox(height: 24),
-
-                  // Quick Actions Section
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Actions rapides',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () => _showQuickActionsBottomSheet(context),
-                        child: const Text('Voir tout'),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Quick Actions Grid
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 1.1,
-                    children: [
-                      _buildQuickActionCard(
-                        icon: Icons.person_add,
-                        label: 'Nouveau\nCommerçant',
-                        color: Colors.blue,
-                        onTap: () => Navigator.pushNamed(
-                            context, AppRoutes.merchantsManagementScreen),
-                      ),
-                      _buildQuickActionCard(
-                        icon: Icons.receipt_long,
-                        label: 'Nouveau\nPaiement',
-                        color: Colors.green,
-                        onTap: () => Navigator.pushNamed(
-                            context, AppRoutes.addPaymentFormScreen),
-                      ),
-                      _buildQuickActionCard(
-                        icon: Icons.folder,
-                        label: 'Documents',
-                        color: Colors.orange,
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => const DocumentsScreen()),
-                        ),
-                      ),
-                      _buildQuickActionCard(
-                        icon: Icons.assignment,
-                        label: 'Nouveau\nBail',
-                        color: Colors.purple,
-                        onTap: () => Navigator.pushNamed(
-                            context, AppRoutes.addLeaseFormScreen),
-                      ),
-                      _buildQuickActionCard(
-                        icon: Icons.analytics,
-                        label: 'Statistiques',
-                        color: Colors.indigo,
-                        onTap: () => Navigator.pushNamed(
-                            context, AppRoutes.statisticsScreen),
-                      ),
-                      _buildQuickActionCard(
-                        icon: Icons.description,
-                        label: 'Rapports',
-                        color: Colors.teal,
-                        onTap: () => Navigator.pushNamed(
-                            context, AppRoutes.reportsScreen),
-                      ),
-                    ],
-                  ),
-
-                  // PARTIE 2 - 3 GRAPHIQUES
-                  _buildChartsSection(),
-                  SizedBox(height: 6.w),
-
-                  // PARTIE 3 - APERÇU DÉTAILLÉ DES ÉTAGES
-                  _buildFloorDetailsSection(),
-                ],
-              ),
-            ),
+      backgroundColor: AppTheme.background,
+      extendBodyBehindAppBar: true,
+      appBar: _buildModernAppBar(),
+      drawer: _buildModernDrawer(context),
+      body:
+          _isLoading
+              ? _buildLoadingState()
+              : _errorMessage != null
+              ? _buildErrorState()
+              : _buildDashboardContent(),
       bottomNavigationBar: const CustomBottomBar(
         currentIndex: 0,
         variant: CustomBottomBarVariant.standard,
       ),
+    );
+  }
+
+  PreferredSizeWidget _buildModernAppBar() {
+    return PreferredSize(
+      preferredSize: Size.fromHeight(120),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: AppTheme.appBarGradient,
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.shadowColor,
+              blurRadius: 8,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(Icons.menu, color: AppTheme.surface, size: 28),
+                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Dashboard',
+                        style: Theme.of(context).textTheme.headlineLarge
+                            ?.copyWith(color: AppTheme.surface),
+                      ),
+                      Text(
+                        'Vue d\'ensemble du marché',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppTheme.surface.withAlpha(204),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                NotificationBadge(),
+                SizedBox(width: 8),
+                IconButton(
+                  icon: Icon(Icons.auto_fix_high, color: AppTheme.surface),
+                  tooltip: 'Générer paiements du mois',
+                  onPressed: _genererPaiementsMois,
+                ),
+                IconButton(
+                  icon: Icon(Icons.sync, color: AppTheme.surface),
+                  tooltip: 'Synchroniser manuellement',
+                  onPressed: _syncManuelle,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return Container(
+      margin: EdgeInsets.only(top: 120),
+      child: Column(
+        children: [
+          SizedBox(height: 60),
+          CircularProgressIndicator(color: AppTheme.primary),
+          SizedBox(height: 24),
+          Text(
+            'Chargement des données...',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Container(
+      margin: EdgeInsets.only(top: 120),
+      padding: EdgeInsets.all(24),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withAlpha(26),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.error_outline, size: 64, color: AppTheme.error),
+            ),
+            SizedBox(height: 24),
+            Text(
+              'Erreur de chargement',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            SizedBox(height: 12),
+            Text(
+              _errorMessage ?? 'Une erreur est survenue',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: _loadData,
+              icon: Icon(Icons.refresh),
+              label: Text('Réessayer'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: AppTheme.surface,
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDashboardContent() {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          margin: EdgeInsets.only(top: 120),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(height: 24),
+
+                // Main statistics cards with modern design
+                _buildMainStatsGrid(),
+                SizedBox(height: 24),
+
+                // Quick Actions Section with modern design
+                _buildQuickActionsSection(),
+                SizedBox(height: 24),
+
+                // Charts section with animations
+                _buildChartsSection(),
+                SizedBox(height: 24),
+
+                // Floor details with modern expansion tiles
+                _buildFloorDetailsSection(),
+                SizedBox(height: 100), // Bottom padding for better scroll
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMainStatsGrid() {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      childAspectRatio: 1.0,
+      crossAxisSpacing: 16,
+      mainAxisSpacing: 16,
+      children: [
+        _buildOccupationCard(),
+        _buildDailyIncomeCard(),
+        _buildOverdueCard(),
+        _buildPendingPaymentsCard(),
+      ],
+    );
+  }
+
+  // Modern occupation card with glassmorphism and animations
+  Widget _buildOccupationCard() {
+    if (_dashboardStats == null) return _buildSkeletonCard();
+
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 600),
+      curve: Curves.easeOutBack,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppTheme.surface, AppTheme.surface.withAlpha(242)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.shadowColor.withAlpha(51),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _showOccupationDetails(),
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.success.withAlpha(26),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.business,
+                        color: AppTheme.success,
+                        size: 20,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'OCCUPATION',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 16),
+
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularPercentIndicator(
+                        radius: 50.0,
+                        lineWidth: 8.0,
+                        animation: true,
+                        animationDuration: 1200,
+                        percent: _dashboardStats!.tauxOccupation / 100,
+                        center: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '293',
+                              style: TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.success,
+                              ),
+                            ),
+                            Text(
+                              'locaux occupés',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.normal,
+                                color: AppTheme.textSecondary,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                        circularStrokeCap: CircularStrokeCap.round,
+                        progressColor: AppTheme.success,
+                        backgroundColor: AppTheme.success.withAlpha(26),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Modern daily income card with trend indicator
+  Widget _buildDailyIncomeCard() {
+    if (_dashboardStats == null) return _buildSkeletonCard();
+
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 700),
+      curve: Curves.easeOutBack,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppTheme.surface, AppTheme.surface.withAlpha(242)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.shadowColor.withAlpha(51),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _genererRapportCollecteAujourdhui(),
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Color(0x1A10B981),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.attach_money,
+                        color: Color(0xFF10B981),
+                        size: 20,
+                      ),
+                    ),
+                    Spacer(),
+                    Icon(Icons.picture_as_pdf, size: 16, color: AppTheme.error),
+                  ],
+                ),
+                SizedBox(height: 8),
+
+                Text(
+                  'COLLECTE AUJOURD\'HUI',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                SizedBox(height: 8),
+
+                Expanded(
+                  child: Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          '${(_dashboardStats!.encaissements / 1000000).toStringAsFixed(1)}M',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF10B981),
+                          ),
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'FCFA',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.normal,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.success.withAlpha(26),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.arrow_upward,
+                            size: 12,
+                            color: AppTheme.success,
+                          ),
+                          Text(
+                            '+12%',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: AppTheme.success,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Modern overdue payments card with urgent styling
+  Widget _buildOverdueCard() {
+    if (_dashboardStats == null) return _buildSkeletonCard();
+
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 800),
+      curve: Curves.easeOutBack,
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.shadowColor.withAlpha(51),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _genererRapportMontantEnRetard(),
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.pink,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'URGENT',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppTheme.surface,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Spacer(),
+                    Icon(Icons.picture_as_pdf, size: 16, color: Colors.pink),
+                  ],
+                ),
+                SizedBox(height: 8),
+
+                Row(
+                  children: [
+                    Icon(Icons.warning_amber, color: Colors.pink, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'IMPAYÉS',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 8),
+
+                Expanded(
+                  child: Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          '${(_dashboardStats!.impayes / 1000000).toStringAsFixed(1)}M',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.pink,
+                          ),
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'FCFA',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.normal,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                Text(
+                  'en retard',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.normal,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Modern pending payments card
+  Widget _buildPendingPaymentsCard() {
+    if (_dashboardStats == null) return _buildSkeletonCard();
+
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 900),
+      curve: Curves.easeOutBack,
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.shadowColor.withAlpha(51),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _genererRapportPaiementsEnAttente(),
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warning.withAlpha(26),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.pending_actions,
+                        color: AppTheme.warning,
+                        size: 20,
+                      ),
+                    ),
+                    Spacer(),
+                    Icon(
+                      Icons.picture_as_pdf,
+                      size: 16,
+                      color: AppTheme.warning,
+                    ),
+                  ],
+                ),
+                SizedBox(height: 8),
+
+                Text(
+                  'PAIEMENTS EN ATTENTE',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                SizedBox(height: 8),
+
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      '${_dashboardStats!.commercants}',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.warning,
+                      ),
+                    ),
+                  ),
+                ),
+
+                LinearPercentIndicator(
+                  lineHeight: 6.0,
+                  percent: (_dashboardStats!.commercants / 100).clamp(0.0, 1.0),
+                  backgroundColor: AppTheme.warning.withAlpha(51),
+                  progressColor: AppTheme.warning,
+                  barRadius: Radius.circular(4),
+                  animation: true,
+                  animationDuration: 1000,
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'paiements',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.normal,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Actions rapides',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            TextButton(
+              onPressed: () => _showQuickActionsBottomSheet(context),
+              child: Text('Voir tout'),
+            ),
+          ],
+        ),
+        SizedBox(height: 16),
+
+        GridView.count(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
+          crossAxisCount: 3,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.1,
+          children: [
+            _buildQuickActionCard(
+              icon: Icons.person_add,
+              label: 'Nouveau\nCommerçant',
+              color: AppTheme.secondary,
+              onTap:
+                  () => Navigator.pushNamed(
+                    context,
+                    AppRoutes.merchantsManagementScreen,
+                  ),
+            ),
+            _buildQuickActionCard(
+              icon: Icons.receipt_long,
+              label: 'Nouveau\nPaiement',
+              color: AppTheme.success,
+              onTap:
+                  () => Navigator.pushNamed(
+                    context,
+                    AppRoutes.addPaymentFormScreen,
+                  ),
+            ),
+            _buildQuickActionCard(
+              icon: Icons.folder,
+              label: 'Documents',
+              color: AppTheme.warning,
+              onTap:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const DocumentsScreen(),
+                    ),
+                  ),
+            ),
+            _buildQuickActionCard(
+              icon: Icons.assignment,
+              label: 'Nouveau\nBail',
+              color: AppTheme.primary,
+              onTap:
+                  () => Navigator.pushNamed(
+                    context,
+                    AppRoutes.addLeaseFormScreen,
+                  ),
+            ),
+            _buildQuickActionCard(
+              icon: Icons.analytics,
+              label: 'Statistiques',
+              color: Colors.indigo,
+              onTap:
+                  () =>
+                      Navigator.pushNamed(context, AppRoutes.statisticsScreen),
+            ),
+            _buildQuickActionCard(
+              icon: Icons.description,
+              label: 'Rapports',
+              color: Colors.teal,
+              onTap:
+                  () => Navigator.pushNamed(context, AppRoutes.reportsScreen),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -426,41 +1065,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withAlpha(26),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  icon,
-                  color: color,
-                  size: 24,
-                ),
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 300),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: AppTheme.modernCardShadow,
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(26),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, color: color, size: 24),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -473,18 +1116,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Impossible de synchroniser hors ligne'),
-          backgroundColor: Colors.orange,
+          backgroundColor: AppTheme.warning,
         ),
       );
       return;
     }
 
     if (_sync.isSyncing) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Synchronisation déjà en cours'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Synchronisation déjà en cours')));
       return;
     }
 
@@ -493,297 +1134,944 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('✅ Synchronisation terminée'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppTheme.success,
       ),
     );
   }
 
   // NOUVELLE MÉTHODE - Génération des paiements du mois avec vérification connexion
   Future<void> _genererPaiementsMois() async {
-    // Vérifier connexion
     if (!_connectivity.isOnline) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Row(
-            children: [
-              Icon(Icons.cloud_off, color: Colors.orange),
-              SizedBox(width: 8),
-              Text('Mode hors ligne'),
-            ],
-          ),
-          content: Text('Cette action nécessite une connexion internet.\n\n'
-              'Vous pouvez consulter les données en cache, mais les modifications '
-              'ne seront possibles qu\'une fois reconnecté.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Compris'),
-            ),
-          ],
-        ),
-      );
+      _showOfflineDialog();
       return;
     }
 
-    // Confirmer avec l'utilisateur
-    final confirme = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Générer paiements'),
-        content: Text(
-            'Génération des paiements pour les baux actifs uniquement.\n\n'
-            'Les locaux sans bail ou avec bail résilié/expiré ne seront pas inclus.\n\n'
-            'Continuer ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Générer'),
-          ),
-        ],
-      ),
+    final confirme = await _showConfirmationDialog(
+      'Générer paiements',
+      'Génération des paiements pour les baux actifs uniquement.\n\n'
+          'Les locaux sans bail ou avec bail résilié/expiré ne seront pas inclus.\n\n'
+          'Continuer ?',
     );
 
     if (confirme != true) return;
 
     try {
-      // Afficher loader
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      _showLoadingDialog('Génération des paiements en cours...');
 
-      // Mois actuel
       final now = DateTime.now();
       final moisConcerne =
           '${now.year}-${now.month.toString().padLeft(2, '0')}';
 
-      // Générer
-      final paiements =
-          await _paiementsService.genererPaiementsMois(moisConcerne);
-
-      // Fermer loader
-      Navigator.pop(context);
-
-      // Afficher résultat
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.green),
-              SizedBox(width: 8),
-              Text('Génération terminée'),
-            ],
-          ),
-          content: Text('${paiements.length} paiements générés\n'
-              'pour les baux actifs uniquement.'),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('OK'),
-            ),
-          ],
-        ),
+      final paiements = await _paiementsService.genererPaiementsMois(
+        moisConcerne,
       );
 
-      // Recharger données et sync
+      Navigator.pop(context);
+
+      _showSuccessDialog(
+        'Génération terminée',
+        '${paiements.length} paiements générés\npour les baux actifs uniquement.',
+      );
+
       _loadData();
       if (_connectivity.isOnline) {
         await _sync.syncAll();
       }
 
-      // Après génération réussie, rafraîchir les notifications
       try {
         await NotificationService().rafraichirCompteurs();
       } catch (e) {
         print('❌ Erreur rafraîchissement notifications: $e');
       }
     } catch (e) {
-      Navigator.pop(context); // Fermer loader
-
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Row(
-            children: [
-              Icon(Icons.error, color: Colors.red),
-              SizedBox(width: 8),
-              Text('Erreur'),
-            ],
-          ),
-          content: Text('Erreur génération : $e'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('OK'),
-            ),
-          ],
-        ),
-      );
+      Navigator.pop(context);
+      _showErrorDialog('Erreur génération : $e');
     }
   }
 
-  Widget _buildLoadingState() {
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.all(4.w),
-      child: Column(
-        children: [
-          _buildSkeletonGrid(),
-          SizedBox(height: 6.w),
-          _buildSkeletonChart(),
-          _buildSkeletonChart(),
-          _buildSkeletonChart(),
-        ],
-      ),
+  // Dialogs and utilitaires
+  void _showLoadingDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Center(
+          child: Container(
+            padding: EdgeInsets.all(24),
+            margin: EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: AppTheme.elevatedCardShadow,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: AppTheme.primary),
+                SizedBox(height: 20),
+                Text(
+                  message,
+                  style: Theme.of(context).textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildErrorState() {
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.all(6.w),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Colors.red[400],
-            ),
-            SizedBox(height: 4.w),
-            Text(
-              'Erreur de chargement',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
-              ),
-            ),
-            SizedBox(height: 2.w),
-            Text(
-              _errorMessage ?? 'Une erreur est survenue',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            SizedBox(height: 6.w),
-            ElevatedButton.icon(
-              onPressed: _loadData,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Réessayer'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4CAF50),
-                foregroundColor: Colors.white,
-              ),
+  void _showInfoDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.info_rounded, color: AppTheme.secondary),
+              SizedBox(width: 8),
+              Text('Information'),
+            ],
+          ),
+          content: Text(message),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('OK'),
             ),
           ],
-        ),
+        );
+      },
+    );
+  }
+
+  void _showSuccessDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.check_circle, color: AppTheme.success, size: 28),
+                SizedBox(width: 8),
+                Text(title),
+              ],
+            ),
+            content: Text(message),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('OK'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.error, color: AppTheme.error, size: 28),
+                SizedBox(width: 8),
+                Text('Erreur'),
+              ],
+            ),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('OK'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _showOfflineDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.cloud_off, color: AppTheme.warning),
+                SizedBox(width: 8),
+                Text('Mode hors ligne'),
+              ],
+            ),
+            content: Text(
+              'Cette action nécessite une connexion internet.\n\n'
+              'Vous pouvez consulter les données en cache, mais les modifications '
+              'ne seront possibles qu\'une fois reconnecté.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Compris'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<bool?> _showConfirmationDialog(String title, String message) {
+    return showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text(title),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text('Annuler'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text('Continuer'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppTheme.success,
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 3),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
 
-  Widget _buildDashboardContent() {
-    if (_dashboardStats == null) return const SizedBox.shrink();
-
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.all(4.w),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // PARTIE 1 - 4 WIDGETS PRINCIPAUX (Grid 2x2)
-          _buildMainWidgets(),
-          SizedBox(height: 6.w),
-
-          // PARTIE 2 - 3 GRAPHIQUES
-          _buildChartsSection(),
-          SizedBox(height: 6.w),
-
-          // PARTIE 3 - APERÇU DÉTAILLÉ DES ÉTAGES
-          _buildFloorDetailsSection(),
-        ],
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppTheme.error,
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
 
-  // PARTIE 1 - 4 WIDGETS PRINCIPAUX
-  Widget _buildMainWidgets() {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      childAspectRatio: 1.1,
-      crossAxisSpacing: 3.w,
-      mainAxisSpacing: 3.w,
+  void _showOccupationDetails() {
+    // Navigate to properties screen or show details
+    Navigator.pushNamed(context, AppRoutes.propertiesManagementScreen);
+  }
+
+  void _showQuickActionsBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.textLabel,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              SizedBox(height: 20),
+              Text(
+                'Actions rapides',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              SizedBox(height: 20),
+              GridView.count(
+                shrinkWrap: true,
+                physics: NeverScrollableScrollPhysics(),
+                crossAxisCount: 3,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.1,
+                children: [
+                  _buildQuickActionCard(
+                    icon: Icons.person_add,
+                    label: 'Nouveau\nCommerçant',
+                    color: AppTheme.secondary,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.merchantsManagementScreen,
+                      );
+                    },
+                  ),
+                  _buildQuickActionCard(
+                    icon: Icons.receipt_long,
+                    label: 'Nouveau\nPaiement',
+                    color: AppTheme.success,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.addPaymentFormScreen,
+                      );
+                    },
+                  ),
+                  _buildQuickActionCard(
+                    icon: Icons.folder,
+                    label: 'Documents',
+                    color: AppTheme.warning,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const DocumentsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildQuickActionCard(
+                    icon: Icons.assignment,
+                    label: 'Nouveau\nBail',
+                    color: AppTheme.primary,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.addLeaseFormScreen,
+                      );
+                    },
+                  ),
+                  _buildQuickActionCard(
+                    icon: Icons.analytics,
+                    label: 'Statistiques',
+                    color: Colors.indigo,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, AppRoutes.statisticsScreen);
+                    },
+                  ),
+                  _buildQuickActionCard(
+                    icon: Icons.description,
+                    label: 'Rapports',
+                    color: Colors.teal,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, AppRoutes.reportsScreen);
+                    },
+                  ),
+                ],
+              ),
+              SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // PARTIE 2 - 3 GRAPHIQUES (utilise les données réelles)
+  Widget _buildChartsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildOccupationWidget(),
-        _buildDailyIncomeWidget(),
-        _buildOverdueWidget(),
-        _buildMerchantActivityWidget(),
+        Text(
+          'Analyses et tendances',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        SizedBox(height: 16),
+        _buildTrendChart(),
+        SizedBox(height: 16),
+        _buildRevenueByTypeChart(),
+        SizedBox(height: 16),
+        _buildOccupancyByFloorChart(),
       ],
     );
   }
 
-  // Widget 1 - OCCUPATION (utilise les données réelles)
-  Widget _buildOccupationWidget() {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: EdgeInsets.all(4.w),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            Row(
+  // 1. LineChart - TENDANCE 7 JOURS (utilise les données réelles)
+  Widget _buildTrendChart() {
+    const List<String> labelsTendance = [
+      'Lun',
+      'Mar',
+      'Mer',
+      'Jeu',
+      'Ven',
+      'Sam',
+      'Dim',
+    ];
+
+    // Check if data is empty
+    bool hasData = _tendancePaiements.isNotEmpty;
+
+    return Container(
+      height: 220,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.shadowColor.withAlpha(51),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Tendance des encaissements',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          SizedBox(height: 16),
+          Expanded(
+            child:
+                hasData
+                    ? LineChart(
+                      LineChartData(
+                        gridData: FlGridData(show: false),
+                        titlesData: FlTitlesData(
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              getTitlesWidget: (value, meta) {
+                                return Text(
+                                  '${value.toInt()}M',
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                );
+                              },
+                              reservedSize: 30,
+                            ),
+                          ),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              getTitlesWidget: (value, meta) {
+                                if (value.toInt() >= 0 &&
+                                    value.toInt() < labelsTendance.length) {
+                                  return Text(
+                                    labelsTendance[value.toInt()],
+                                    style:
+                                        Theme.of(context).textTheme.labelSmall,
+                                  );
+                                }
+                                return const Text('');
+                              },
+                            ),
+                          ),
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                        ),
+                        borderData: FlBorderData(show: false),
+                        lineBarsData: [
+                          LineChartBarData(
+                            spots:
+                                _tendancePaiements
+                                    .asMap()
+                                    .entries
+                                    .map(
+                                      (e) => FlSpot(
+                                        e.key.toDouble(),
+                                        e.value.montant,
+                                      ),
+                                    )
+                                    .toList(),
+                            isCurved: true,
+                            color: AppTheme.secondary,
+                            barWidth: 3,
+                            dotData: const FlDotData(show: true),
+                            belowBarData: BarAreaData(
+                              show: true,
+                              color: AppTheme.secondary.withAlpha(26),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                    : Center(
+                      child: Text(
+                        'Aucune donnée historique',
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
+                    ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 2. BarChart - ENCAISSEMENTS PAR TYPE (utilise les données réelles)
+  Widget _buildRevenueByTypeChart() {
+    const List<Color> colors = [
+      AppTheme.secondary,
+      AppTheme.success,
+      AppTheme.warning,
+      AppTheme.primary,
+      Color(0xFFFFEB3B),
+      AppTheme.error,
+    ];
+
+    // Check if data is empty
+    bool hasData = _encaissementsParType.isNotEmpty;
+
+    return Container(
+      height: 250,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.shadowColor.withAlpha(51),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Revenus par type de local',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          SizedBox(height: 16),
+          Expanded(
+            child:
+                hasData
+                    ? BarChart(
+                      BarChartData(
+                        alignment: BarChartAlignment.spaceAround,
+                        barGroups:
+                            _encaissementsParType.asMap().entries.map((entry) {
+                              return BarChartGroupData(
+                                x: entry.key,
+                                barRods: [
+                                  BarChartRodData(
+                                    toY: entry.value.montant,
+                                    color: colors[entry.key % colors.length],
+                                    width: 20,
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(4),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }).toList(),
+                        titlesData: FlTitlesData(
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              getTitlesWidget:
+                                  (value, meta) => Text(
+                                    '${value.toInt()}M',
+                                    style:
+                                        Theme.of(context).textTheme.labelSmall,
+                                  ),
+                              reservedSize: 30,
+                            ),
+                          ),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              getTitlesWidget: (value, meta) {
+                                if (value.toInt() >= 0 &&
+                                    value.toInt() <
+                                        _encaissementsParType.length) {
+                                  return Transform.rotate(
+                                    angle: -0.785398,
+                                    child: Text(
+                                      _encaissementsParType[value.toInt()].type,
+                                      style:
+                                          Theme.of(
+                                            context,
+                                          ).textTheme.labelSmall,
+                                    ),
+                                  );
+                                }
+                                return const Text('');
+                              },
+                              reservedSize: 40,
+                            ),
+                          ),
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                        ),
+                        gridData: const FlGridData(show: false),
+                        borderData: FlBorderData(show: false),
+                      ),
+                    )
+                    : Center(
+                      child: Text(
+                        'Aucune donnée historique',
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
+                    ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 3. PieChart - OCCUPATION PAR ÉTAGE (utilise les données réelles)
+  Widget _buildOccupancyByFloorChart() {
+    const List<Color> colors = [
+      AppTheme.success,
+      AppTheme.secondary,
+      AppTheme.warning,
+      AppTheme.error,
+    ];
+
+    return Container(
+      height: 240,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.shadowColor.withAlpha(51),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Répartition par étage',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          SizedBox(height: 16),
+          Expanded(
+            child: Row(
               children: [
-                const Icon(Icons.business, color: Color(0xFF4CAF50), size: 20),
-                SizedBox(width: 2.w),
                 Expanded(
-                  child: Text(
-                    'OCCUPATION',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[700]),
+                  flex: 4,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      PieChart(
+                        PieChartData(
+                          sectionsSpace: 3,
+                          centerSpaceRadius: 40,
+                          sections:
+                              _occupationEtages.asMap().entries.map((entry) {
+                                return PieChartSectionData(
+                                  color: colors[entry.key % colors.length],
+                                  value: entry.value.taux,
+                                  title: '',
+                                  radius: 45,
+                                );
+                              }).toList(),
+                        ),
+                      ),
+                      Container(
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surface,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.shadowColor.withAlpha(51),
+                              blurRadius: 8,
+                              offset: Offset(0, 4),
+                              spreadRadius: 0,
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${_dashboardStats?.tauxOccupation.toInt() ?? 0}%',
+                              style: Theme.of(
+                                context,
+                              ).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.success,
+                              ),
+                            ),
+                            Text(
+                              'Total',
+                              style: Theme.of(context).textTheme.labelMedium,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: 16),
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children:
+                        _occupationEtages.asMap().entries.map((entry) {
+                          return Container(
+                            margin: EdgeInsets.symmetric(vertical: 4),
+                            padding: EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.background,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppTheme.textLabel.withAlpha(26),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                    color: colors[entry.key % colors.length],
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        entry.value.etage,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelMedium?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        '${entry.value.taux.toInt()}%',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelMedium?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color:
+                                              colors[entry.key % colors.length],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
                   ),
                 ),
               ],
             ),
-            CircularPercentIndicator(
-              radius: 30.0,
-              lineWidth: 6.0,
-              animation: true,
-              percent: _dashboardStats!.tauxOccupation / 100,
-              center: Text(
-                '${_dashboardStats!.tauxOccupation.toInt()}%',
-                style:
-                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // PARTIE 3 - APERÇU DÉTAILLÉ DES ÉTAGES (utilise les données réelles)
+  Widget _buildFloorDetailsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Détails par étage',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        SizedBox(height: 16),
+        ..._statsEtages.entries.map((entry) {
+          return _buildModernFloorExpansionTile(entry.key, entry.value);
+        }).toList(),
+      ],
+    );
+  }
+
+  Widget _buildModernFloorExpansionTile(
+    String floorKey,
+    Map<String, dynamic> floorData,
+  ) {
+    double percentage = floorData['tauxOccupation'] ?? 0.0;
+    int occupes = floorData['occupes'] ?? 0;
+    int disponibles = floorData['disponibles'] ?? 0;
+    Map<String, dynamic> types = floorData['types'] ?? {};
+
+    Color badgeColor =
+        percentage >= 90
+            ? AppTheme.success
+            : percentage >= 80
+            ? AppTheme.warning
+            : AppTheme.error;
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: AppTheme.modernCardShadow,
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          childrenPadding: EdgeInsets.zero,
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  floorData['nom'] ?? floorKey,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-              circularStrokeCap: CircularStrokeCap.round,
-              progressColor: const Color(0xFF4CAF50),
-              backgroundColor: Colors.grey[200]!,
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: badgeColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  '${percentage.toInt()}%',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: AppTheme.surface,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          subtitle: Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$occupes occupés • $disponibles disponibles',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                SizedBox(height: 8),
+                LinearProgressIndicator(
+                  value: percentage / 100,
+                  backgroundColor: badgeColor.withAlpha(51),
+                  valueColor: AlwaysStoppedAnimation<Color>(badgeColor),
+                  minHeight: 6,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                SizedBox(height: 8),
+              ],
             ),
-            Text(
-              '${_dashboardStats!.occupes}/${_dashboardStats!.totalLocaux} locaux',
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-            ),
-            Text(
-              '${_dashboardStats!.disponibles} disponibles • ${_dashboardStats!.inactifs} inactifs',
-              style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+          ),
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                children:
+                    types.entries.map<Widget>((typeEntry) {
+                      String typeName = typeEntry.key;
+                      Map<String, dynamic> typeData =
+                          typeEntry.value as Map<String, dynamic>;
+                      int typeOccupes = typeData['occupes'] ?? 0;
+                      int typeTotal = typeData['total'] ?? 0;
+                      double typePercentage =
+                          typeTotal > 0 ? (typeOccupes / typeTotal) * 100 : 0;
+
+                      return Container(
+                        margin: EdgeInsets.only(bottom: 8),
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.background,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: AppTheme.textLabel.withAlpha(26),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '$typeName: $typeOccupes/$typeTotal',
+                                    style:
+                                        Theme.of(context).textTheme.titleSmall,
+                                  ),
+                                  SizedBox(height: 4),
+                                  LinearProgressIndicator(
+                                    value: typePercentage / 100,
+                                    backgroundColor: AppTheme.secondary
+                                        .withAlpha(51),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      AppTheme.secondary,
+                                    ),
+                                    minHeight: 4,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.secondary.withAlpha(26),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${typePercentage.toInt()}%',
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.labelMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.secondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+              ),
             ),
           ],
         ),
@@ -791,210 +2079,244 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Widget 2 - ENCAISSEMENTS JOUR (utilise les données réelles et clickable)
-  Widget _buildDailyIncomeWidget() {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: () => _genererRapportCollecteAujourdhui(),
+  Widget _buildSkeletonCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: EdgeInsets.all(4.w),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.attach_money,
-                      size: 24, color: Color(0xFF2196F3)),
-                  SizedBox(width: 2.w),
-                  Expanded(
-                    child: Text(
-                      'COLLECTE AUJOURD\'HUI',
-                      style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey[700]),
-                    ),
-                  ),
-                  Icon(Icons.picture_as_pdf, size: 16, color: Colors.red[600]),
-                ],
+        boxShadow: AppTheme.modernCardShadow,
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppTheme.textLabel.withAlpha(77),
+                borderRadius: BorderRadius.circular(20),
               ),
-              Flexible(
-                child: Text(
-                  '${(_dashboardStats!.encaissements / 1000000).toStringAsFixed(1)}M FCFA',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+            ),
+            SizedBox(height: 12),
+            Container(
+              width: 80,
+              height: 20,
+              decoration: BoxDecoration(
+                color: AppTheme.textLabel.withAlpha(77),
+                borderRadius: BorderRadius.circular(4),
               ),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 2.w, vertical: 1.w),
-                decoration: BoxDecoration(
-                  color: Colors.green[100],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '+12% vs hier',
-                  style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.green[700],
-                      fontWeight: FontWeight.w600),
-                ),
-              ),
-              Text(
-                'Tapez pour générer PDF',
-                style: TextStyle(fontSize: 9, color: Colors.grey[500]),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // Widget 3 - IMPAYÉS (utilise les données réelles et clickable)
-  Widget _buildOverdueWidget() {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: () => _genererRapportMontantEnRetard(),
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFFFFEBEE), Color(0xFFFFCDD2)],
-            ),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          padding: EdgeInsets.all(4.w),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Icon(Icons.warning_amber,
-                      size: 24, color: Color(0xFFF44336)),
-                  Row(
+  Widget _buildModernDrawer(BuildContext context) {
+    return Container(
+      width: 280,
+      child: Drawer(
+        backgroundColor: AppTheme.surface,
+        child: Column(
+          children: [
+            Container(
+              height: 200,
+              decoration: BoxDecoration(gradient: AppTheme.appBarGradient),
+              child: SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       Container(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 2.w, vertical: 1.w),
+                        padding: EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.red[600],
+                          color: AppTheme.surface.withAlpha(51),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Text(
-                          'URGENT',
-                          style: TextStyle(
-                              fontSize: 8,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold),
+                        child: Icon(
+                          Icons.business,
+                          color: AppTheme.surface,
+                          size: 32,
                         ),
                       ),
-                      SizedBox(width: 1.w),
-                      Icon(Icons.picture_as_pdf,
-                          size: 16, color: Colors.red[600]),
+                      SizedBox(height: 16),
+                      Text(
+                        'Marché Cocody Saint Jean',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: AppTheme.surface,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Gestion locative moderne',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppTheme.surface.withAlpha(204),
+                        ),
+                      ),
                     ],
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                children: [
+                  _buildModernDrawerItem(
+                    context,
+                    'Dashboard',
+                    Icons.dashboard_rounded,
+                    AppRoutes.dashboardScreen,
+                    isSelected: true,
+                  ),
+                  _buildModernDrawerItem(
+                    context,
+                    'Locaux',
+                    Icons.business_rounded,
+                    AppRoutes.propertiesManagementScreen,
+                  ),
+                  _buildModernDrawerItem(
+                    context,
+                    'Commerçants',
+                    Icons.store_rounded,
+                    AppRoutes.merchantsManagementScreen,
+                  ),
+                  _buildModernDrawerItem(
+                    context,
+                    'Baux',
+                    Icons.description_rounded,
+                    AppRoutes.leaseManagementScreen,
+                  ),
+                  _buildModernDrawerItem(
+                    context,
+                    'Paiements',
+                    Icons.payment_rounded,
+                    AppRoutes.paymentsManagementScreen,
+                  ),
+                  _buildModernDrawerItem(
+                    context,
+                    'Documents',
+                    Icons.folder_rounded,
+                    AppRoutes.documentsScreen,
+                  ),
+                  _buildModernDrawerItem(
+                    context,
+                    'Rapports',
+                    Icons.assessment_rounded,
+                    AppRoutes.reportsScreen,
+                  ),
+                  _buildModernDrawerItem(
+                    context,
+                    'Statistiques',
+                    Icons.analytics_rounded,
+                    AppRoutes.statisticsScreen,
+                  ),
+                  Divider(height: 32, thickness: 1),
+                  _buildModernDrawerItem(
+                    context,
+                    'Paiements en retard',
+                    Icons.warning_rounded,
+                    AppRoutes.overduePaymentsScreen,
+                  ),
+                  _buildModernDrawerItem(
+                    context,
+                    'Baux expirant',
+                    Icons.timer_rounded,
+                    AppRoutes.expiringLeasesScreen,
+                  ),
+                  Divider(height: 32, thickness: 1),
+                  _buildModernDrawerItem(
+                    context,
+                    'Paramètres',
+                    Icons.settings_rounded,
+                    AppRoutes.settingsScreen,
                   ),
                 ],
               ),
-              Flexible(
-                child: Text(
-                  '${(_dashboardStats!.impayes / 1000000).toStringAsFixed(1)}M FCFA',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.red[800]),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Text(
-                'Montants en retard',
-                style:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                'Tapez pour générer PDF',
-                style: TextStyle(fontSize: 9, color: Colors.red[400]),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // Widget 4 - ACTIVITÉ COMMERÇANTS (utilise les données réelles et clickable)
-  Widget _buildMerchantActivityWidget() {
-    final tauxActivite = _dashboardStats!.totalLocaux > 0
-        ? (_dashboardStats!.commercants / _dashboardStats!.totalLocaux) * 100
-        : 0.0;
-
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: () => _genererRapportPaiementsEnAttente(),
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: EdgeInsets.all(4.w),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.people, color: Color(0xFF2196F3), size: 20),
-                  SizedBox(width: 2.w),
-                  Expanded(
-                    child: Text(
-                      'PAIEMENTS EN ATTENTE',
-                      style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey[700]),
+  Widget _buildModernDrawerItem(
+    BuildContext context,
+    String title,
+    IconData icon,
+    String route, {
+    bool isSelected = false,
+  }) {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            Navigator.pop(context);
+            if (!isSelected) {
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                route,
+                (route) => false,
+              );
+            }
+          },
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color:
+                  isSelected
+                      ? AppTheme.primary.withAlpha(26)
+                      : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color:
+                        isSelected
+                            ? AppTheme.primary.withAlpha(51)
+                            : AppTheme.textLabel.withAlpha(26),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    icon,
+                    color:
+                        isSelected ? AppTheme.primary : AppTheme.textSecondary,
+                    size: 20,
+                  ),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color:
+                          isSelected ? AppTheme.primary : AppTheme.textPrimary,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w500,
                     ),
                   ),
-                  Icon(Icons.picture_as_pdf,
-                      size: 16, color: Colors.orange[600]),
-                ],
-              ),
-              Flexible(
-                child: Text(
-                  '${_dashboardStats!.commercants}',
-                  style: const TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
                 ),
-              ),
-              LinearPercentIndicator(
-                lineHeight: 6.0,
-                percent: tauxActivite / 100,
-                backgroundColor: Colors.grey[200]!,
-                progressColor: const Color(0xFF4CAF50),
-                barRadius: const Radius.circular(4),
-                animation: true,
-              ),
-              Text(
-                'Tapez pour générer PDF',
-                style: TextStyle(fontSize: 9, color: Colors.grey[500]),
-                textAlign: TextAlign.center,
-              ),
-            ],
+                if (isSelected)
+                  Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1005,14 +2327,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _genererRapportCollecteAujourdhui() async {
     try {
       _showLoadingDialog(
-          'Génération du rapport des paiements d\'aujourd\'hui...');
+        'Génération du rapport des paiements d\'aujourd\'hui...',
+      );
 
       final now = DateTime.now();
       final dateDebut = DateTime(now.year, now.month, now.day);
       final dateFin = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
       print(
-          '🔍 Recherche des paiements pour le ${DateFormat('yyyy-MM-dd').format(dateDebut)}');
+        '🔍 Recherche des paiements pour le ${DateFormat('yyyy-MM-dd').format(dateDebut)}',
+      );
 
       // Récupérer les paiements qui ont été payés aujourd'hui OU qui sont dus aujourd'hui
       final paiements = await _paiementsService.supabase
@@ -1025,13 +2349,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             locaux(numero)
           )
         ''')
-          .or('date_paiement.eq.${DateFormat('yyyy-MM-dd').format(dateDebut)},date_echeance.eq.${DateFormat('yyyy-MM-dd').format(dateDebut)}')
+          .or(
+            'date_paiement.eq.${DateFormat('yyyy-MM-dd').format(dateDebut)},date_echeance.eq.${DateFormat('yyyy-MM-dd').format(dateDebut)}',
+          )
           .inFilter('statut', ['Payé', 'Partiel'])
           .order('date_paiement', ascending: false);
 
       print('✅ Trouvé ${paiements.length} paiements pour aujourd\'hui');
       print(
-          '📊 Détails des paiements: ${paiements.map((p) => 'ID: ${p['id']}, Statut: ${p['statut']}, Date paiement: ${p['date_paiement']}, Date échéance: ${p['date_echeance']}, Montant: ${p['montant']}').join(' | ')}');
+        '📊 Détails des paiements: ${paiements.map((p) => 'ID: ${p['id']}, Statut: ${p['statut']}, Date paiement: ${p['date_paiement']}, Date échéance: ${p['date_echeance']}, Montant: ${p['montant']}').join(' | ')}',
+      );
 
       Navigator.of(context).pop(); // Fermer le dialog de loading
 
@@ -1044,10 +2371,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .limit(10);
 
         print(
-            '🔍 Debug - Derniers paiements en base: ${allPayments.map((p) => 'Statut: ${p['statut']}, Date paiement: ${p['date_paiement']}, Date échéance: ${p['date_echeance']}').join(' | ')}');
+          '🔍 Debug - Derniers paiements en base: ${allPayments.map((p) => 'Statut: ${p['statut']}, Date paiement: ${p['date_paiement']}, Date échéance: ${p['date_echeance']}').join(' | ')}',
+        );
 
         _showInfoDialog(
-            'Aucun paiement effectué aujourd\'hui (${DateFormat('dd/MM/yyyy').format(dateDebut)}).\n\nVérifiez s\'il y a des paiements avec les statuts "Payé" ou "Partiel" pour cette date.');
+          'Aucun paiement effectué aujourd\'hui (${DateFormat('dd/MM/yyyy').format(dateDebut)}).\n\nVérifiez s\'il y a des paiements avec les statuts "Payé" ou "Partiel" pour cette date.',
+        );
         return;
       }
 
@@ -1060,13 +2389,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
 
       _showSuccessSnackBar(
-          'Rapport des paiements d\'aujourd\'hui généré avec succès ! (${paiements.length} paiements)');
+        'Rapport des paiements d\'aujourd\'hui généré avec succès ! (${paiements.length} paiements)',
+      );
     } catch (e) {
       print('❌ Erreur lors de la génération du rapport: $e');
-      Navigator.of(context)
-          .pop(); // Fermer le dialog de loading en cas d'erreur
+      Navigator.of(
+        context,
+      ).pop(); // Fermer le dialog de loading en cas d'erreur
       _showErrorSnackBar(
-          'Erreur lors de la génération du rapport: ${e.toString()}');
+        'Erreur lors de la génération du rapport: ${e.toString()}',
+      );
     }
   }
 
@@ -1075,8 +2407,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _showLoadingDialog('Génération du rapport des paiements en retard...');
 
       // Récupérer TOUS les paiements en retard sans restriction de période
-      final paiements =
-          await _paiementsService.supabase.from('paiements').select('''
+      final paiements = await _paiementsService.supabase
+          .from('paiements')
+          .select('''
           *,
           baux!inner(
             numero_contrat,
@@ -1084,7 +2417,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             commercants(nom, activite),
             locaux(numero)
           )
-        ''').eq('statut', 'En retard').order('date_echeance', ascending: true);
+        ''')
+          .eq('statut', 'En retard')
+          .order('date_echeance', ascending: true);
 
       Navigator.of(context).pop(); // Fermer le dialog de loading
 
@@ -1103,12 +2438,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
 
       _showSuccessSnackBar(
-          'Rapport des paiements en retard généré avec succès !');
+        'Rapport des paiements en retard généré avec succès !',
+      );
     } catch (e) {
-      Navigator.of(context)
-          .pop(); // Fermer le dialog de loading en cas d'erreur
+      Navigator.of(
+        context,
+      ).pop(); // Fermer le dialog de loading en cas d'erreur
       _showErrorSnackBar(
-          'Erreur lors de la génération du rapport: ${e.toString()}');
+        'Erreur lors de la génération du rapport: ${e.toString()}',
+      );
     }
   }
 
@@ -1117,8 +2455,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _showLoadingDialog('Génération du rapport des paiements en attente...');
 
       // Récupérer TOUS les paiements en attente sans restriction de période
-      final paiements =
-          await _paiementsService.supabase.from('paiements').select('''
+      final paiements = await _paiementsService.supabase
+          .from('paiements')
+          .select('''
           *,
           baux!inner(
             numero_contrat,
@@ -1126,7 +2465,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             commercants(nom, activite),
             locaux(numero)
           )
-        ''').eq('statut', 'En attente').order('date_echeance', ascending: true);
+        ''')
+          .eq('statut', 'En attente')
+          .order('date_echeance', ascending: true);
 
       Navigator.of(context).pop(); // Fermer le dialog de loading
 
@@ -1145,914 +2486,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
 
       _showSuccessSnackBar(
-          'Rapport des paiements en attente généré avec succès !');
+        'Rapport des paiements en attente généré avec succès !',
+      );
     } catch (e) {
-      Navigator.of(context)
-          .pop(); // Fermer le dialog de loading en cas d'erreur
+      Navigator.of(
+        context,
+      ).pop(); // Fermer le dialog de loading en cas d'erreur
       _showErrorSnackBar(
-          'Erreur lors de la génération du rapport: ${e.toString()}');
+        'Erreur lors de la génération du rapport: ${e.toString()}',
+      );
     }
-  }
-
-  // Dialogs et utilitaires
-  void _showLoadingDialog(String message) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Expanded(child: Text(message)),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showInfoDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Information'),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('OK'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 3),
-      ),
-    );
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 4),
-      ),
-    );
-  }
-
-  // PARTIE 2 - 3 GRAPHIQUES (utilise les données réelles)
-  Widget _buildChartsSection() {
-    return Column(
-      children: [
-        _buildTrendChart(),
-        SizedBox(height: 4.w),
-        _buildRevenueByTypeChart(),
-        SizedBox(height: 4.w),
-        _buildOccupancyByFloorChart(),
-      ],
-    );
-  }
-
-  // 1. LineChart - TENDANCE 7 JOURS (utilise les données réelles)
-  Widget _buildTrendChart() {
-    const List<String> labelsTendance = [
-      'Lun',
-      'Mar',
-      'Mer',
-      'Jeu',
-      'Ven',
-      'Sam',
-      'Dim'
-    ];
-
-    return Container(
-      height: 220,
-      padding: EdgeInsets.all(4.w),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withAlpha(26),
-            spreadRadius: 1,
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Tendance des encaissements',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 4.w),
-          Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(show: false),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        return Text('${value.toInt()}M',
-                            style: TextStyle(
-                                fontSize: 10, color: Colors.grey[600]));
-                      },
-                      reservedSize: 30,
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        if (value.toInt() >= 0 &&
-                            value.toInt() < labelsTendance.length) {
-                          return Text(
-                            labelsTendance[value.toInt()],
-                            style: TextStyle(
-                                fontSize: 10, color: Colors.grey[600]),
-                          );
-                        }
-                        return const Text('');
-                      },
-                    ),
-                  ),
-                  topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                ),
-                borderData: FlBorderData(show: false),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: _tendancePaiements
-                        .asMap()
-                        .entries
-                        .map((e) => FlSpot(e.key.toDouble(), e.value.montant))
-                        .toList(),
-                    isCurved: true,
-                    color: const Color(0xFF2196F3),
-                    barWidth: 3,
-                    dotData: const FlDotData(show: true),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: const Color(0xFF2196F3).withAlpha(26),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 2. BarChart - ENCAISSEMENTS PAR TYPE (utilise les données réelles)
-  Widget _buildRevenueByTypeChart() {
-    const List<Color> colors = [
-      Color(0xFF2196F3), // bleu
-      Color(0xFF4CAF50), // vert
-      Color(0xFFFF9800), // orange
-      Color(0xFF9C27B0), // violet
-      Color(0xFFFFEB3B), // jaune
-      Color(0xFFF44336), // rouge
-    ];
-
-    return Container(
-      height: 250,
-      padding: EdgeInsets.all(4.w),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withAlpha(26),
-            spreadRadius: 1,
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Revenus par type de local',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 4.w),
-          Expanded(
-            child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                barGroups: _encaissementsParType.asMap().entries.map((entry) {
-                  return BarChartGroupData(
-                    x: entry.key,
-                    barRods: [
-                      BarChartRodData(
-                        toY: entry.value.montant,
-                        color: colors[entry.key % colors.length],
-                        width: 20,
-                        borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(4)),
-                      ),
-                    ],
-                  );
-                }).toList(),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) => Text(
-                          '${value.toInt()}M',
-                          style:
-                              TextStyle(fontSize: 10, color: Colors.grey[600])),
-                      reservedSize: 30,
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        if (value.toInt() >= 0 &&
-                            value.toInt() < _encaissementsParType.length) {
-                          return Transform.rotate(
-                            angle: -0.785398, // 45 degrees in radians
-                            child: Text(
-                              _encaissementsParType[value.toInt()].type,
-                              style: TextStyle(
-                                  fontSize: 8, color: Colors.grey[600]),
-                            ),
-                          );
-                        }
-                        return const Text('');
-                      },
-                      reservedSize: 40,
-                    ),
-                  ),
-                  topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                ),
-                gridData: const FlGridData(show: false),
-                borderData: FlBorderData(show: false),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 3. PieChart - OCCUPATION PAR ÉTAGE (utilise les données réelles)
-  Widget _buildOccupancyByFloorChart() {
-    const List<Color> colors = [
-      Color(0xFF4CAF50), // vert
-      Color(0xFF2196F3), // bleu
-      Color(0xFFFF9800), // orange
-      Color(0xFFEF5350), // rouge clair
-    ];
-
-    return Container(
-      height: 240, // Augmenté pour plus d'espace
-      padding: EdgeInsets.all(4.w),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withAlpha(26),
-            spreadRadius: 1,
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Répartition par étage',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 3.w),
-          Expanded(
-            child: Row(
-              children: [
-                // Graphique pie - optimisé sans texte à l'intérieur
-                Expanded(
-                  flex: 4,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      PieChart(
-                        PieChartData(
-                          sectionsSpace: 3,
-                          centerSpaceRadius: 40,
-                          sections:
-                              _occupationEtages.asMap().entries.map((entry) {
-                            return PieChartSectionData(
-                              color: colors[entry.key % colors.length],
-                              value: entry.value.taux,
-                              title: '', // Pas de texte dans le graphique
-                              radius: 45,
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                      // Pourcentage global au centre
-                      Container(
-                        padding: EdgeInsets.all(2.5.w),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.grey.withAlpha(51),
-                              spreadRadius: 1,
-                              blurRadius: 3,
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '${_dashboardStats!.tauxOccupation.toInt()}%',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey[800],
-                              ),
-                            ),
-                            Text(
-                              'Total',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                SizedBox(width: 3.w),
-
-                // Légende optimisée
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: _occupationEtages.asMap().entries.map((entry) {
-                      return Container(
-                        margin: EdgeInsets.symmetric(vertical: 1.w),
-                        padding: EdgeInsets.all(2.w),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.grey[200]!),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: colors[entry.key % colors.length],
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            SizedBox(width: 2.w),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    entry.value.etage,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  Text(
-                                    '${entry.value.taux.toInt()}%',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: colors[entry.key % colors.length],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // PARTIE 3 - APERÇU DÉTAILLÉ DES ÉTAGES (utilise les données réelles)
-  Widget _buildFloorDetailsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Détails par étage',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        SizedBox(height: 4.w),
-        ..._statsEtages.entries.map((entry) {
-          return _buildFloorExpansionTile(entry.key, entry.value);
-        }).toList(),
-      ],
-    );
-  }
-
-  Widget _buildFloorExpansionTile(
-      String floorKey, Map<String, dynamic> floorData) {
-    double percentage = floorData['tauxOccupation'] ?? 0.0;
-    int occupes = floorData['occupes'] ?? 0;
-    int disponibles = floorData['disponibles'] ?? 0;
-    Map<String, dynamic> types = floorData['types'] ?? {};
-
-    Color badgeColor = percentage >= 90
-        ? const Color(0xFF4CAF50)
-        : percentage >= 80
-            ? const Color(0xFFFF9800)
-            : const Color(0xFFF44336);
-
-    return Card(
-      margin: EdgeInsets.only(bottom: 2.w),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 1.w),
-        childrenPadding: EdgeInsets.zero,
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                floorData['nom'] ?? floorKey,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 3.w, vertical: 1.w),
-              decoration: BoxDecoration(
-                color: badgeColor,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                '${percentage.toInt()}%',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: EdgeInsets.only(top: 2.w),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$occupes occupés • $disponibles disponibles',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey[600],
-                ),
-              ),
-              SizedBox(height: 2.w),
-              LinearProgressIndicator(
-                value: percentage / 100,
-                backgroundColor: Colors.grey[200],
-                valueColor: AlwaysStoppedAnimation<Color>(badgeColor),
-                minHeight: 4,
-              ),
-              SizedBox(height: 2.w),
-            ],
-          ),
-        ),
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(4.w, 0, 4.w, 4.w),
-            child: Column(
-              children: types.entries.map<Widget>((typeEntry) {
-                String typeName = typeEntry.key;
-                Map<String, dynamic> typeData =
-                    typeEntry.value as Map<String, dynamic>;
-                int typeOccupes = typeData['occupes'] ?? 0;
-                int typeTotal = typeData['total'] ?? 0;
-                double typePercentage =
-                    typeTotal > 0 ? (typeOccupes / typeTotal) * 100 : 0;
-
-                return Container(
-                  margin: EdgeInsets.only(bottom: 2.w),
-                  padding: EdgeInsets.all(3.w),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey[200]!, width: 1),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '$typeName: $typeOccupes/$typeTotal',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w500,
-                                fontSize: 13,
-                              ),
-                            ),
-                            SizedBox(height: 1.w),
-                            LinearProgressIndicator(
-                              value: typePercentage / 100,
-                              backgroundColor: Colors.grey[200],
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                  Color(0xFF2196F3)),
-                              minHeight: 3,
-                            ),
-                          ],
-                        ),
-                      ),
-                      SizedBox(width: 3.w),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 2.w, vertical: 0.5.w),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2196F3).withAlpha(26),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '${typePercentage.toInt()}%',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color: Color(0xFF2196F3),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Skeleton Loading
-  Widget _buildSkeletonGrid() {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      childAspectRatio: 0.9,
-      crossAxisSpacing: 4.w,
-      mainAxisSpacing: 4.w,
-      children: List.generate(4, (index) => _buildSkeletonCard()),
-    );
-  }
-
-  Widget _buildSkeletonCard() {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: EdgeInsets.all(5.w),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(20),
-              ),
-            ),
-            SizedBox(height: 3.w),
-            Container(
-              width: 80,
-              height: 20,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            SizedBox(height: 2.w),
-            Container(
-              width: 60,
-              height: 14,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSkeletonChart() {
-    return Container(
-      height: 200,
-      margin: EdgeInsets.only(bottom: 4.w),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withAlpha(26),
-            spreadRadius: 1,
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(4.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 150,
-              height: 20,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            SizedBox(height: 4.w),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawer(BuildContext context) {
-    return Drawer(
-      child: Column(
-        children: [
-          DrawerHeader(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF4CAF50), Color(0xFF45a049)],
-              ),
-            ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Icon(
-                  Icons.business,
-                  color: Colors.white,
-                  size: 48,
-                ),
-                SizedBox(height: 16),
-                Text(
-                  'Marché Cocody Saint Jean',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  'Gestion locative',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                _buildDrawerItem(
-                  context,
-                  'Dashboard',
-                  Icons.dashboard,
-                  '/dashboard-screen',
-                  isSelected: true,
-                ),
-                _buildDrawerItem(
-                  context,
-                  'Locaux',
-                  Icons.business,
-                  '/properties-management-screen',
-                ),
-                _buildDrawerItem(
-                  context,
-                  'Commerçants',
-                  Icons.store,
-                  '/merchants-management-screen',
-                ),
-                _buildDrawerItem(
-                  context,
-                  'Baux',
-                  Icons.description,
-                  '/lease-management-screen',
-                ),
-                _buildDrawerItem(
-                  context,
-                  'Paiements',
-                  Icons.payment,
-                  '/payments-management-screen',
-                ),
-                _buildDrawerItem(
-                  context,
-                  'Rapports',
-                  Icons.assessment,
-                  '/reports-screen',
-                ),
-                _buildDrawerItem(
-                  context,
-                  'Statistiques',
-                  Icons.analytics,
-                  '/statistics-screen',
-                ),
-                const Divider(),
-                _buildDrawerItem(
-                  context,
-                  'Paramètres',
-                  Icons.settings,
-                  '/settings-screen',
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDrawerItem(
-    BuildContext context,
-    String title,
-    IconData icon,
-    String route, {
-    bool isSelected = false,
-  }) {
-    return ListTile(
-      leading: Icon(
-        icon,
-        color: isSelected ? const Color(0xFF4CAF50) : Colors.grey[600],
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          color: isSelected ? const Color(0xFF4CAF50) : Colors.black87,
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-        ),
-      ),
-      selected: isSelected,
-      selectedTileColor: const Color(0xFF4CAF50).withAlpha(26),
-      onTap: () {
-        Navigator.pop(context);
-        if (!isSelected) {
-          Navigator.pushNamedAndRemoveUntil(context, route, (route) => false);
-        }
-      },
-    );
-  }
-
-  void _showQuickActionsBottomSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Actions rapides',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              SizedBox(height: 16),
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 3,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.1,
-                children: [
-                  _buildQuickActionCard(
-                    icon: Icons.person_add,
-                    label: 'Nouveau\nCommerçant',
-                    color: Colors.blue,
-                    onTap: () => Navigator.pushNamed(
-                        context, AppRoutes.merchantsManagementScreen),
-                  ),
-                  _buildQuickActionCard(
-                    icon: Icons.receipt_long,
-                    label: 'Nouveau\nPaiement',
-                    color: Colors.green,
-                    onTap: () => Navigator.pushNamed(
-                        context, AppRoutes.addPaymentFormScreen),
-                  ),
-                  _buildQuickActionCard(
-                    icon: Icons.folder,
-                    label: 'Documents',
-                    color: Colors.orange,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => const DocumentsScreen()),
-                    ),
-                  ),
-                  _buildQuickActionCard(
-                    icon: Icons.assignment,
-                    label: 'Nouveau\nBail',
-                    color: Colors.purple,
-                    onTap: () => Navigator.pushNamed(
-                        context, AppRoutes.addLeaseFormScreen),
-                  ),
-                  _buildQuickActionCard(
-                    icon: Icons.analytics,
-                    label: 'Statistiques',
-                    color: Colors.indigo,
-                    onTap: () => Navigator.pushNamed(
-                        context, AppRoutes.statisticsScreen),
-                  ),
-                  _buildQuickActionCard(
-                    icon: Icons.description,
-                    label: 'Rapports',
-                    color: Colors.teal,
-                    onTap: () =>
-                        Navigator.pushNamed(context, AppRoutes.reportsScreen),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 }

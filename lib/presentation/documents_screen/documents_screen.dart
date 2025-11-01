@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../services/storage_service.dart';
 import '../../widgets/custom_app_bar.dart';
+import '../../widgets/custom_bottom_bar.dart';
+import '../../widgets/unified_drawer.dart';
+import '../../routes/app_routes.dart';
 import './widgets/document_card_widget.dart';
 import './widgets/document_filter_widget.dart';
 import './widgets/upload_dialog_widget.dart';
@@ -159,13 +162,29 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     );
   }
 
+  int _getBottomBarIndex() {
+    // Documents is not in the bottom navigation bar, so return -1
+    return -1;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool isEntitySpecific =
+        widget.entityType != null && widget.entityId != null;
+
     return Scaffold(
       appBar: CustomAppBar(
         title: widget.entityName != null
             ? 'Documents - ${widget.entityName}'
             : 'Tous les documents',
+        // For entity-specific documents, show back button. For general documents, show drawer
+        automaticallyImplyLeading: isEntitySpecific,
+        leading: isEntitySpecific
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -173,6 +192,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
           ),
         ],
       ),
+      // Only show drawer for general documents view, not for entity-specific
+      drawer: !isEntitySpecific
+          ? UnifiedDrawer(currentRoute: AppRoutes.documentsScreen)
+          : null,
       body: Column(
         children: [
           // Filters section (only show for all documents view)
@@ -230,6 +253,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
           ),
         ],
       ),
+      // Only show bottom navigation for general documents view, not for entity-specific
+      bottomNavigationBar: !isEntitySpecific
+          ? CustomBottomBar(currentIndex: _getBottomBarIndex())
+          : null,
       floatingActionButton: FloatingActionButton(
         onPressed: _showUploadDialog,
         child: const Icon(Icons.add),

@@ -64,7 +64,7 @@ class _OverduePaymentsScreenState extends State<OverduePaymentsScreen> {
       appBar: CustomAppBar(
         title: "Paiements en retard",
         centerTitle: true,
-        backgroundColor: AppTheme.primaryGreen,
+        backgroundColor: AppTheme.primary,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -270,8 +270,8 @@ class _OverduePaymentsScreenState extends State<OverduePaymentsScreen> {
                     icon: const Icon(Icons.visibility, size: 18),
                     label: const Text('Détails'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.primaryBlue,
-                      side: BorderSide(color: AppTheme.primaryBlue),
+                      foregroundColor: AppTheme.primary,
+                      side: BorderSide(color: AppTheme.primary),
                     ),
                   ),
                 ),

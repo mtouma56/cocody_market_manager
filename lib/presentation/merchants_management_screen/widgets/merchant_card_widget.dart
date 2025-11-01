@@ -40,32 +40,32 @@ class MerchantCardWidget extends StatelessWidget {
           children: [
             SlidableAction(
               onPressed: (context) => onCall?.call(),
-              backgroundColor: AppTheme.primaryBlue,
-              foregroundColor: AppTheme.surfaceWhite,
+              backgroundColor: AppTheme.primary,
+              foregroundColor: AppTheme.surface,
               icon: Icons.phone,
               label: 'Appeler',
               borderRadius: BorderRadius.circular(8),
             ),
             SlidableAction(
               onPressed: (context) => onMessage?.call(),
-              backgroundColor: AppTheme.primaryGreen,
-              foregroundColor: AppTheme.surfaceWhite,
+              backgroundColor: AppTheme.success,
+              foregroundColor: AppTheme.surface,
               icon: Icons.message,
               label: 'Message',
               borderRadius: BorderRadius.circular(8),
             ),
             SlidableAction(
               onPressed: (context) => onViewLease?.call(),
-              backgroundColor: AppTheme.infoAccent,
-              foregroundColor: AppTheme.surfaceWhite,
+              backgroundColor: AppTheme.secondary,
+              foregroundColor: AppTheme.surface,
               icon: Icons.description,
               label: 'Bail',
               borderRadius: BorderRadius.circular(8),
             ),
             SlidableAction(
               onPressed: (context) => onPaymentHistory?.call(),
-              backgroundColor: AppTheme.warningAccent,
-              foregroundColor: AppTheme.surfaceWhite,
+              backgroundColor: AppTheme.warning,
+              foregroundColor: AppTheme.surface,
               icon: Icons.payment,
               label: 'Paiements',
               borderRadius: BorderRadius.circular(8),
@@ -77,16 +77,16 @@ class MerchantCardWidget extends StatelessWidget {
           children: [
             SlidableAction(
               onPressed: (context) => onEdit?.call(),
-              backgroundColor: AppTheme.primaryBlue,
-              foregroundColor: AppTheme.surfaceWhite,
+              backgroundColor: AppTheme.primary,
+              foregroundColor: AppTheme.surface,
               icon: Icons.edit,
               label: 'Modifier',
               borderRadius: BorderRadius.circular(8),
             ),
             SlidableAction(
               onPressed: (context) => onRemove?.call(),
-              backgroundColor: AppTheme.alertRed,
-              foregroundColor: AppTheme.surfaceWhite,
+              backgroundColor: AppTheme.error,
+              foregroundColor: AppTheme.surface,
               icon: Icons.delete,
               label: 'Supprimer',
               borderRadius: BorderRadius.circular(8),
@@ -282,19 +282,19 @@ class MerchantCardWidget extends StatelessWidget {
 
     switch (status.toLowerCase()) {
       case 'active':
-        statusColor = AppTheme.primaryGreen;
+        statusColor = AppTheme.success;
         statusText = 'Actif';
         break;
       case 'expiring':
-        statusColor = AppTheme.warningAccent;
+        statusColor = AppTheme.warning;
         statusText = 'Expire bientôt';
         break;
       case 'overdue':
-        statusColor = AppTheme.alertRed;
+        statusColor = AppTheme.error;
         statusText = 'En retard';
         break;
       default:
-        statusColor = AppTheme.neutralMedium;
+        statusColor = AppTheme.textSecondary;
         statusText = 'Inconnu';
     }
 
