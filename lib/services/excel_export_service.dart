@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-// Conditional import: use dart:html for web, nothing for mobile
-import 'dart:html' as html if (dart.library.html) 'dart:html';
+// Conditional import for web support only
+import 'dart:html' as html show Blob, Url, AnchorElement, document;
 
 class ExcelExportService {
   /// Exporter rapport paiements en CSV format Excel
@@ -48,12 +48,11 @@ class ExcelExportService {
         (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
       );
 
-      final totalPaye = paiements
-          .where((p) => p['statut'] == 'Payé')
-          .fold<double>(
-            0.0,
-            (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
-          );
+      final totalPaye =
+          paiements.where((p) => p['statut'] == 'Payé').fold<double>(
+                0.0,
+                (sum, p) => sum + ((p['montant'] as num?)?.toDouble() ?? 0),
+              );
 
       final nbPayes = paiements.where((p) => p['statut'] == 'Payé').length;
       final nbPartiels =
@@ -179,10 +178,9 @@ class ExcelExportService {
       final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
       final url = html.Url.createObjectUrlFromBlob(blob);
 
-      final anchor =
-          html.AnchorElement(href: url)
-            ..setAttribute('download', fileName)
-            ..style.display = 'none';
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute('download', fileName)
+        ..style.display = 'none';
 
       html.document.body?.children.add(anchor);
       anchor.click();
