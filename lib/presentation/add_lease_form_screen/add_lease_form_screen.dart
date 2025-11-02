@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sizer/sizer.dart';
+import 'package:intl/intl.dart';
 
 import '../../services/bail_validation_service.dart';
 import '../../services/leases_service.dart';
 import '../../widgets/custom_app_bar.dart';
+import '../../widgets/validated_text_form_field.dart';
 
 class AddLeaseFormScreen extends StatefulWidget {
   const AddLeaseFormScreen({super.key});
@@ -26,6 +28,11 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
   DateTime? _dateFin;
   final _rentAmountController = TextEditingController();
   final _depositAmountController = TextEditingController();
+  final NumberFormat _currencyFormat = NumberFormat.currency(
+    locale: 'fr_FR',
+    symbol: 'FCFA',
+    decimalDigits: 0,
+  );
   String _contractNumber = '';
   String _depositType = 'caution'; // 'caution' or 'pas_de_porte'
 
@@ -530,21 +537,23 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
     );
   }
 
-  Widget _buildFormSection(String title, Widget child) {
+  Widget _buildFormSection(String? title, Widget child) {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 1.h),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: GoogleFonts.inter(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: Colors.black87,
+          if (title != null && title.isNotEmpty) ...[
+            Text(
+              title,
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: Colors.black87,
+              ),
             ),
-          ),
-          SizedBox(height: 1.h),
+            SizedBox(height: 1.h),
+          ],
           child,
         ],
       ),
@@ -612,28 +621,19 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
 
         // Montant du dépôt
         _buildFormSection(
-          'Montant du ${_depositType == 'caution' ? 'caution' : 'pas de porte'} (FCFA)',
-          TextFormField(
+          null,
+          ValidatedTextFormField(
             controller: _depositAmountController,
-            decoration: InputDecoration(
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              hintText: 'Ex: 50000 (optionnel)',
-              prefixIcon: Icon(
-                _depositType == 'caution'
-                    ? Icons.shield
-                    : Icons.store_mall_directory,
-              ),
-              suffixText: 'FCFA',
-              filled: true,
-              fillColor: Colors.white,
-              helperText: _depositType == 'caution'
-                  ? 'Montant remboursable à la fin du bail'
-                  : 'Montant non-remboursable pour l\'obtention du local',
-              helperStyle:
-                  GoogleFonts.inter(fontSize: 11, color: Colors.grey[600]),
-            ),
+            label:
+                'Montant du ${_depositType == 'caution' ? 'caution' : 'pas de porte'} (FCFA)',
+            hintText: 'Ex: 50000 (optionnel)',
+            prefixIcon: _depositType == 'caution'
+                ? Icons.shield
+                : Icons.store_mall_directory,
+            suffixText: 'FCFA',
+            helperText: _depositType == 'caution'
+                ? 'Montant remboursable à la fin du bail'
+                : 'Montant non-remboursable pour l\'obtention du local',
             keyboardType: TextInputType.number,
             inputFormatters: [
               FilteringTextInputFormatter.digitsOnly,
@@ -651,31 +651,46 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
 
                 return TextEditingValue(
                   text: formatted,
-                  selection: TextSelection.collapsed(
-                    offset: formatted.length,
-                  ),
+                  selection: TextSelection.collapsed(offset: formatted.length),
                 );
               }),
             ],
             validator: (value) {
-              // Le dépôt est optionnel
-              if (value == null || value.isEmpty) {
+              if (value.isEmpty) {
                 return null;
               }
 
               final cleanValue = value.replaceAll(' ', '');
-              if (double.tryParse(cleanValue) == null) {
+              final amount = double.tryParse(cleanValue);
+              if (amount == null) {
                 return 'Montant invalide';
               }
 
-              final amount = double.parse(cleanValue);
               if (amount <= 0) {
                 return 'Le montant doit être positif';
               }
 
               return null;
             },
-            style: GoogleFonts.inter(fontSize: 14),
+            dynamicHintBuilder: (value) {
+              if (value.trim().isEmpty) {
+                return _depositType == 'caution'
+                    ? 'Facultatif mais conseillé pour sécuriser les impayés'
+                    : 'Saisissez 0 si aucun pas de porte n\'est requis';
+              }
+              final cleanValue = value.replaceAll(' ', '');
+              final amount = double.tryParse(cleanValue);
+              if (amount == null || amount <= 0) {
+                return '';
+              }
+
+              if (_depositType == 'caution') {
+                final trimestre = amount / 3;
+                return 'Couvre environ ${_currencyFormat.format(trimestre)} par trimestre de garantie';
+              }
+
+              return 'Encaissement initial total: ${_currencyFormat.format(amount)}';
+            },
           ),
         ),
       ],
@@ -1208,24 +1223,17 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
 
               // Rent amount
               _buildFormSection(
-                'Montant du loyer (FCFA) *',
-                TextFormField(
+                null,
+                ValidatedTextFormField(
                   controller: _rentAmountController,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    hintText: 'Ex: 150000',
-                    prefixIcon: const Icon(Icons.attach_money),
-                    suffixText: 'FCFA',
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
+                  label: 'Montant du loyer (FCFA) *',
+                  hintText: 'Ex: 150000',
+                  prefixIcon: Icons.attach_money,
+                  suffixText: 'FCFA',
                   keyboardType: TextInputType.number,
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
                     TextInputFormatter.withFunction((oldValue, newValue) {
-                      // Format avec espaces pour milliers
                       final text = newValue.text;
                       if (text.isEmpty) return newValue;
 
@@ -1239,27 +1247,37 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
 
                       return TextEditingValue(
                         text: formatted,
-                        selection: TextSelection.collapsed(
-                          offset: formatted.length,
-                        ),
+                        selection:
+                            TextSelection.collapsed(offset: formatted.length),
                       );
                     }),
                   ],
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
+                    if (value.isEmpty) {
                       return 'Champ requis';
                     }
                     final cleanValue = value.replaceAll(' ', '');
-                    if (double.tryParse(cleanValue) == null) {
+                    final amount = double.tryParse(cleanValue);
+                    if (amount == null) {
                       return 'Montant invalide';
                     }
-                    final amount = double.parse(cleanValue);
                     if (amount <= 0) {
                       return 'Le montant doit être positif';
                     }
                     return null;
                   },
-                  style: GoogleFonts.inter(fontSize: 14),
+                  dynamicHintBuilder: (value) {
+                    final cleanValue = value.replaceAll(' ', '');
+                    if (cleanValue.isEmpty) {
+                      return 'Montant mensuel attendu pour le commerçant';
+                    }
+                    final amount = double.tryParse(cleanValue);
+                    if (amount == null || amount <= 0) {
+                      return '';
+                    }
+                    final weekly = amount / 4;
+                    return '≈ ${_currencyFormat.format(weekly)} par semaine estimée';
+                  },
                 ),
               ),
 

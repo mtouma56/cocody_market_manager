@@ -13,6 +13,15 @@ class AppTheme {
   static const Color success = Color(0xFF388E3C); // Dark green
   static const Color background = Color(0xFFF5F5F5); // Very light gray
   static const Color surface = Color(0xFFFFFFFF); // White
+  static const Color primaryBlue = Color(0xFF1E88E5);
+  static const Color successAccent = Color(0xFF4CAF50);
+  static const Color warningAccent = Color(0xFFFFB300);
+  static const Color infoAccent = Color(0xFF29B6F6);
+  static const Color alertRed = Color(0xFFE53935);
+  static const Color primaryGreen = primary;
+  static const Color neutralMedium = Color(0xFFB0BEC5);
+  static const Color surfaceWhite = Color(0xFFFFFFFF);
+  static const Color shadowLight = Color(0x14000000);
 
   // Gradient colors for AppBar and special cards
   static const Color gradientStart = Color(0xFF1B5E20); // Dark green
@@ -77,7 +86,7 @@ class AppTheme {
     ),
 
     // Modern card theme with elevated design
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       elevation: 2,
       shadowColor: shadowColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -143,36 +152,53 @@ class AppTheme {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: surface,
-      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      focusColor: primary.withValues(alpha: 0.05),
+      hoverColor: primary.withValues(alpha: 0.04),
+      floatingLabelBehavior: FloatingLabelBehavior.auto,
+      contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Color(0xFFE0E0E0), width: 1),
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: const Color(0xFFDDE3E8), width: 1.2),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Color(0xFFE0E0E0), width: 1),
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: const Color(0xFFDDE3E8), width: 1.2),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: primary, width: 2),
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: primary, width: 1.8),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: error, width: 1),
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: error, width: 1.4),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: error, width: 2),
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: error, width: 1.6),
       ),
       labelStyle: GoogleFonts.inter(
         fontSize: 14,
-        fontWeight: FontWeight.normal,
+        fontWeight: FontWeight.w500,
+        color: textSecondary,
+      ),
+      floatingLabelStyle: GoogleFonts.inter(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: primary,
+      ),
+      helperStyle: GoogleFonts.inter(
+        fontSize: 12,
         color: textSecondary,
       ),
       hintStyle: GoogleFonts.inter(
         fontSize: 14,
-        fontWeight: FontWeight.normal,
+        fontWeight: FontWeight.w400,
         color: textLabel,
+      ),
+      errorStyle: GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        color: error,
       ),
     ),
 
@@ -211,7 +237,7 @@ class AppTheme {
     ),
 
     // Modern dialog theme
-    dialogTheme: DialogTheme(
+    dialogTheme: DialogThemeData(
       backgroundColor: surface,
       elevation: 8,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -380,39 +406,39 @@ class AppTheme {
 
   // Helper method to create gradient for AppBar
   static LinearGradient get appBarGradient => LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [gradientStart, gradientEnd],
-  );
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [gradientStart, gradientEnd],
+      );
 
   // Helper method to create glassmorphism effect
   static BoxDecoration get glassmorphismDecoration => BoxDecoration(
-    borderRadius: BorderRadius.circular(16),
-    gradient: LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [glassmorphismOverlay, glassmorphismOverlay.withAlpha(13)],
-    ),
-    border: Border.all(color: glassmorphismOverlay, width: 1),
-  );
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [glassmorphismOverlay, glassmorphismOverlay.withAlpha(13)],
+        ),
+        border: Border.all(color: glassmorphismOverlay, width: 1),
+      );
 
   // Helper method for modern card shadow
   static List<BoxShadow> get modernCardShadow => [
-    BoxShadow(
-      color: shadowColor,
-      blurRadius: 8,
-      offset: Offset(0, 2),
-      spreadRadius: 0,
-    ),
-  ];
+        BoxShadow(
+          color: shadowColor,
+          blurRadius: 8,
+          offset: Offset(0, 2),
+          spreadRadius: 0,
+        ),
+      ];
 
   // Helper method for elevated card shadow
   static List<BoxShadow> get elevatedCardShadow => [
-    BoxShadow(
-      color: shadowColor,
-      blurRadius: 12,
-      offset: Offset(0, 4),
-      spreadRadius: 0,
-    ),
-  ];
+        BoxShadow(
+          color: shadowColor,
+          blurRadius: 12,
+          offset: Offset(0, 4),
+          spreadRadius: 0,
+        ),
+      ];
 }

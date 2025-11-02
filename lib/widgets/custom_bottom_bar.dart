@@ -1,5 +1,10 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import '../routes/app_routes.dart';
 
 enum CustomBottomBarVariant {
   standard,
@@ -89,108 +94,104 @@ class _CustomBottomBarState extends State<CustomBottomBar> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
     switch (widget.variant) {
       case CustomBottomBarVariant.standard:
-        return _buildStandardBottomBar(context, theme, colorScheme);
+        return _buildModernNavigationBar(
+          context,
+          colorScheme,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        );
       case CustomBottomBarVariant.floating:
-        return _buildFloatingBottomBar(context, theme, colorScheme);
+        return _buildModernNavigationBar(
+          context,
+          colorScheme,
+          margin: const EdgeInsets.fromLTRB(24, 0, 24, 28),
+        );
       case CustomBottomBarVariant.minimal:
-        return _buildMinimalBottomBar(context, theme, colorScheme);
+        return _buildMinimalBottomBar(context, colorScheme);
     }
   }
 
-  Widget _buildStandardBottomBar(
-      BuildContext context, ThemeData theme, ColorScheme colorScheme) {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      currentIndex: _currentIndex,
-      onTap: _handleTap,
-      backgroundColor: widget.backgroundColor ?? colorScheme.surface,
-      selectedItemColor: widget.selectedItemColor ?? colorScheme.secondary,
-      unselectedItemColor:
-          widget.unselectedItemColor ?? colorScheme.onSurfaceVariant,
-      elevation: widget.elevation ?? 3.0,
-      selectedLabelStyle: GoogleFonts.roboto(
-        fontSize: 12,
-        fontWeight: FontWeight.w500,
-      ),
-      unselectedLabelStyle: GoogleFonts.roboto(
-        fontSize: 12,
-        fontWeight: FontWeight.w400,
-      ),
-      items: _navItems
-          .map((item) => BottomNavigationBarItem(
-                icon: Icon(item.icon),
-                activeIcon: Icon(item.selectedIcon),
-                label: item.label,
-                tooltip: item.label,
-              ))
-          .toList(),
-    );
-  }
+  Widget _buildModernNavigationBar(
+    BuildContext context,
+    ColorScheme colorScheme, {
+    EdgeInsetsGeometry margin = const EdgeInsets.fromLTRB(16, 0, 16, 16),
+  }) {
+    final surfaceColor =
+        (widget.backgroundColor ?? colorScheme.surface).withValues(alpha: 0.92);
+    final selectedColor = widget.selectedItemColor ?? colorScheme.primary;
+    final unselectedColor = widget.unselectedItemColor ??
+        colorScheme.onSurfaceVariant.withValues(alpha: 0.75);
 
-  Widget _buildFloatingBottomBar(
-      BuildContext context, ThemeData theme, ColorScheme colorScheme) {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: widget.backgroundColor ?? colorScheme.surface,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+    return Padding(
+      padding: margin,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: colorScheme.shadow.withValues(alpha: 0.08),
+              blurRadius: 28,
+              offset: const Offset(0, 16),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: NavigationBarTheme(
+              data: NavigationBarThemeData(
+                height: 72,
+                indicatorColor: selectedColor.withValues(alpha: 0.14),
+                indicatorShape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                  final isSelected = states.contains(WidgetState.selected);
+                  return GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: isSelected ? selectedColor : unselectedColor,
+                  );
+                }),
+                iconTheme: WidgetStateProperty.resolveWith((states) {
+                  final isSelected = states.contains(WidgetState.selected);
+                  return IconThemeData(
+                    color: isSelected ? selectedColor : unselectedColor,
+                    size: isSelected ? 26 : 24,
+                  );
+                }),
+              ),
+              child: NavigationBar(
+                selectedIndex: _currentIndex,
+                backgroundColor: surfaceColor,
+                elevation: 0,
+                surfaceTintColor: Colors.transparent,
+                animationDuration: const Duration(milliseconds: 420),
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                destinations: [
+                  for (final item in _navItems)
+                    NavigationDestination(
+                      icon: Icon(item.icon),
+                      selectedIcon: Icon(item.selectedIcon),
+                      label: item.label,
+                    )
+                ],
+                onDestinationSelected: _handleTap,
+              ),
+            ),
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: BottomNavigationBar(
-          type: BottomNavigationBarType.fixed,
-          currentIndex: _currentIndex,
-          onTap: _handleTap,
-          backgroundColor: Colors.transparent,
-          selectedItemColor: widget.selectedItemColor ?? colorScheme.secondary,
-          unselectedItemColor:
-              widget.unselectedItemColor ?? colorScheme.onSurfaceVariant,
-          elevation: 0,
-          selectedLabelStyle: GoogleFonts.roboto(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-          ),
-          unselectedLabelStyle: GoogleFonts.roboto(
-            fontSize: 11,
-            fontWeight: FontWeight.w400,
-          ),
-          items: _navItems
-              .map((item) => BottomNavigationBarItem(
-                    icon: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Icon(item.icon, size: 22),
-                    ),
-                    activeIcon: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      decoration: BoxDecoration(
-                        color: colorScheme.secondary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(item.selectedIcon, size: 22),
-                    ),
-                    label: item.label,
-                    tooltip: item.label,
-                  ))
-              .toList(),
         ),
       ),
     );
   }
 
-  Widget _buildMinimalBottomBar(
-      BuildContext context, ThemeData theme, ColorScheme colorScheme) {
+  Widget _buildMinimalBottomBar(BuildContext context, ColorScheme colorScheme) {
     return Container(
       height: 60,
       decoration: BoxDecoration(
@@ -261,13 +262,45 @@ class _CustomBottomBarState extends State<CustomBottomBar> {
     // Call the provided onTap callback
     widget.onTap?.call(index);
 
-    // Navigate to the corresponding route
-    final route = _navItems[index].route;
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      route,
-      (route) => false,
-    );
+    HapticFeedback.selectionClick();
+
+    // Navigate to the corresponding route with a soft transition
+    final routeName = _navItems[index].route;
+    final builder = AppRoutes.routes[routeName];
+
+    if (builder != null) {
+      Navigator.of(context).pushAndRemoveUntil(
+        PageRouteBuilder(
+          settings: RouteSettings(name: routeName),
+          transitionDuration: const Duration(milliseconds: 420),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return builder(context);
+          },
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+              reverseCurve: Curves.easeInCubic,
+            );
+            return FadeTransition(
+              opacity: curved,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.96, end: 1).animate(curved),
+                child: child,
+              ),
+            );
+          },
+        ),
+        (route) => false,
+      );
+    } else {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        routeName,
+        (route) => false,
+      );
+    }
   }
 }
 
