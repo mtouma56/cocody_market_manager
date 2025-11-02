@@ -36,8 +36,23 @@ target 'Runner' do
   end
 end
 
+def apply_plugin_patches(installer)
+  patch_path = File.join(__dir__, 'patches', 'file_picker_ios_fix.patch')
+  return unless File.exist?(patch_path)
+
+  plugin_dir = File.join(installer.sandbox.root, '.symlinks', 'plugins', 'file_picker')
+  return unless Dir.exist?(plugin_dir)
+
+  Dir.chdir(plugin_dir) do
+    result = system('patch', '-p1', '-N', '-i', patch_path)
+    raise "Failed to apply patch #{patch_path}" unless result
+  end
+end
+
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
   end
+
+  apply_plugin_patches(installer)
 end
