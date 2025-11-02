@@ -54,19 +54,22 @@ To run the app with environment variables defined in an env.json file, follow th
 ## 📁 Project Structure
 
 ```
-flutter_app/
+cocody_market_manager/
 ├── android/            # Android-specific configuration
+├── assets/             # Static assets (images, fonts, etc.)
 ├── ios/                # iOS-specific configuration
 ├── lib/
-│   ├── core/           # Core utilities and services
-│   │   └── utils/      # Utility classes
+│   ├── core/           # Core utilities and shared exports
+│   ├── data/           # Mock data sources used across the app
+│   ├── models/         # Data models and DTOs
 │   ├── presentation/   # UI screens and widgets
-│   │   └── splash_screen/ # Splash screen implementation
 │   ├── routes/         # Application routing
+│   ├── services/       # Service-layer integrations
 │   ├── theme/          # Theme configuration
 │   ├── widgets/        # Reusable UI components
 │   └── main.dart       # Application entry point
-├── assets/             # Static assets (images, fonts, etc.)
+├── supabase/           # Database migrations and configuration
+├── env.json            # Environment configuration values
 ├── pubspec.yaml        # Project dependencies and configuration
 └── README.md           # Project documentation
 ```
