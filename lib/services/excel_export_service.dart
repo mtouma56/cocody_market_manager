@@ -5,7 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 // Conditional import for web support only
-import 'dart:html' as html show Blob, Url, AnchorElement, document;
+import 'excel_export_download_stub.dart'
+    if (dart.library.html) 'excel_export_download_web.dart';
 
 class ExcelExportService {
   /// Exporter rapport paiements en CSV format Excel
@@ -173,20 +174,7 @@ class ExcelExportService {
   /// Téléchargement pour Web
   Future<void> _downloadFileWeb(String content, String fileName) async {
     if (kIsWeb) {
-      // Utiliser l'API Web pour télécharger
-      final bytes = utf8.encode(content);
-      final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
-      final url = html.Url.createObjectUrlFromBlob(blob);
-
-      final anchor = html.AnchorElement(href: url)
-        ..setAttribute('download', fileName)
-        ..style.display = 'none';
-
-      html.document.body?.children.add(anchor);
-      anchor.click();
-      html.document.body?.children.remove(anchor);
-
-      html.Url.revokeObjectUrl(url);
+      await downloadFileWeb(content, fileName);
     }
   }
 
