@@ -1,5 +1,9 @@
---- .symlinks/plugins/flutter_local_notifications/ios/Classes/FlutterLocalNotificationsPlugin.h
-+++ .symlinks/plugins/flutter_local_notifications/ios/Classes/FlutterLocalNotificationsPlugin.h
-@@
+--- a/ios/Classes/FlutterLocalNotificationsPlugin.h
++++ b/ios/Classes/FlutterLocalNotificationsPlugin.h
+@@ -2,5 +2,5 @@
+ #import <UserNotifications/UserNotifications.h>
+ 
+ @interface FlutterLocalNotificationsPlugin : NSObject <FlutterPlugin>
 -+ (void)setRegisterPlugins:(FlutterPluginRegistrantCallback *)callback;
 ++ (void)setPluginRegistrantCallback:(FlutterPluginRegistrantCallback)callback;
+ @end

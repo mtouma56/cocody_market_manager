@@ -37,17 +37,38 @@ target 'Runner' do
 end
 
 def apply_plugin_patches(installer)
-  patch_path = File.join(__dir__, 'patches', 'file_picker_ios_fix.patch')
+  patches = {
+    'file_picker' => 'file_picker_ios_fix.patch',
+    'flutter_local_notifications' => 'flutter_local_notifications_plugin.patch',
+  }
+
+  patches.each do |plugin, patch_file|
+    patch_path = File.join(__dir__, 'patches', patch_file)
+    next unless File.exist?(patch_path)
+
+    plugin_dir = File.join(installer.sandbox.root, '.symlinks', 'plugins', plugin)
+    next unless Dir.exist?(plugin_dir)
+
+    Dir.chdir(plugin_dir) do
+      result = system('patch', '-p1', '-N', '-i', patch_path)
+      raise "Failed to apply patch #{patch_file}" unless result
+    end
+  end
+end
+
+def apply_pod_patches(installer)
+  patch_path = File.join(__dir__, 'patches', 'dkimageassetexporter_sendable_fix.patch')
   return unless File.exist?(patch_path)
 
-  plugin_dir = File.join(installer.sandbox.root, '.symlinks', 'plugins', 'file_picker')
-  return unless Dir.exist?(plugin_dir)
+  pod_dir = File.join(installer.sandbox.root, 'Pods', 'DKImagePickerController')
+  return unless Dir.exist?(pod_dir)
 
-  Dir.chdir(plugin_dir) do
+  Dir.chdir(pod_dir) do
     result = system('patch', '-p1', '-N', '-i', patch_path)
     raise "Failed to apply patch #{patch_path}" unless result
   end
 end
+
 
 post_install do |installer|
   swift5_targets = [
@@ -66,12 +87,6 @@ post_install do |installer|
     end
   end
 
-  patch_file = File.join(__dir__, 'patches', 'flutter_local_notifications_plugin.patch')
-  if File.exist?(patch_file)
-    unless system("patch -p0 --forward --silent < \"#{patch_file}\"")
-      puts "warning: Failed to apply flutter_local_notifications patch"
-    end
-  end
-
   apply_plugin_patches(installer)
+  apply_pod_patches(installer)
 end
