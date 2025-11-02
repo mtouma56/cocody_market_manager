@@ -52,4 +52,11 @@ post_install do |installer|
       config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
     end
   end
+
+  patch_file = File.join(__dir__, 'patches', 'flutter_local_notifications_plugin.patch')
+  if File.exist?(patch_file)
+    unless system("patch -p0 --forward --silent < \"#{patch_file}\"")
+      puts "warning: Failed to apply flutter_local_notifications patch"
+    end
+  end
 end

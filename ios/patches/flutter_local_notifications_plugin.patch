@@ -1,0 +1,5 @@
+--- .symlinks/plugins/flutter_local_notifications/ios/Classes/FlutterLocalNotificationsPlugin.h
++++ .symlinks/plugins/flutter_local_notifications/ios/Classes/FlutterLocalNotificationsPlugin.h
+@@
+-+ (void)setRegisterPlugins:(FlutterPluginRegistrantCallback *)callback;
+++ (void)setPluginRegistrantCallback:(FlutterPluginRegistrantCallback)callback;
