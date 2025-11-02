@@ -14,7 +14,7 @@ class ConnectivityService {
   final _statusController = StreamController<bool>.broadcast();
   Stream<bool> get statusStream => _statusController.stream;
 
-  StreamSubscription? _subscription;
+  StreamSubscription<ConnectivityResult>? _subscription;
 
   Future<void> initialize() async {
     // Vérifier statut initial
@@ -30,10 +30,10 @@ class ConnectivityService {
         '✅ Connectivité initialisée : ${_isOnline ? "EN LIGNE" : "HORS LIGNE"}');
   }
 
-  void _updateStatus(List<ConnectivityResult> results) {
-    // Considérer en ligne si au moins une connexion active
+  void _updateStatus(ConnectivityResult result) {
+    // Considérer en ligne si la connexion est active
     final wasOnline = _isOnline;
-    _isOnline = results.any((result) => result != ConnectivityResult.none);
+    _isOnline = result != ConnectivityResult.none;
 
     if (wasOnline != _isOnline) {
       print(
