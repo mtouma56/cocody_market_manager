@@ -1,0 +1,27 @@
+--- a/Sources/DKImagePickerController/DKImageAssetExporter.swift
++++ b/Sources/DKImagePickerController/DKImageAssetExporter.swift
+@@ -539,12 +539,12 @@
+                     if avAsset.isExportable, let exportSession = AVAssetExportSession(asset: avAsset, presetName: self.configuration.videoExportPreset) {
+                         let (auxiliaryDirectory, auxiliaryFilePath) = self.generateAuxiliaryPath(with: asset.localTemporaryPath!)
+ 
+-                        let fileManager = FileManager.default
+-                        if fileManager.fileExists(atPath: auxiliaryFilePath.path) {
+-                            try? fileManager.removeItem(at: auxiliaryFilePath)
++                        let preExportFileManager = FileManager.default
++                        if preExportFileManager.fileExists(atPath: auxiliaryFilePath.path) {
++                            try? preExportFileManager.removeItem(at: auxiliaryFilePath)
+                         }
+ 
+-                        try? fileManager.createDirectory(at: auxiliaryDirectory,
++                        try? preExportFileManager.createDirectory(at: auxiliaryDirectory,
+                                                          withIntermediateDirectories: true,
+                                                          attributes: nil)
+ 
+@@ -553,6 +553,7 @@
+                         exportSession.shouldOptimizeForNetworkUse = true
+                         exportSession.directoryForTemporaryFiles = auxiliaryDirectory
+                         exportSession.exportAsynchronously(completionHandler: {
++                            let fileManager = FileManager.default
+                             defer {
+                                 try? fileManager.removeItem(at: auxiliaryDirectory)
+                             }

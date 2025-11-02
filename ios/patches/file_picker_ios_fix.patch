@@ -1,19 +1,22 @@
 --- a/ios/file_picker/Sources/file_picker/FilePickerPlugin.m
 +++ b/ios/file_picker/Sources/file_picker/FilePickerPlugin.m
-@@
--    UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"" message:@"" preferredStyle:UIAlertControllerStyleAlert];
+@@ -290,7 +290,12 @@
+     DKImagePickerController * dkImagePickerController = [[DKImagePickerController alloc] init];
+ 
+     UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"" message:@"" preferredStyle:UIAlertControllerStyleAlert];
 -    UIActivityIndicatorView* indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhite];
-+    UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"" message:@"" preferredStyle:UIAlertControllerStyleAlert];
 +    UIActivityIndicatorView* indicator;
 +    if (@available(iOS 13.0, *)) {
 +        indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
 +    } else {
 +        indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhite];
 +    }
-@@
--    NSMutableArray<NSURL *> *newUrls;
--    if(controller.documentPickerMode == UIDocumentPickerModeOpen) {
+@@ -406,7 +411,7 @@
+     }
+     NSMutableArray<NSURL *> *newUrls;
+     if(controller.documentPickerMode == UIDocumentPickerModeOpen) {
 -        newUrls = urls;
-+    NSMutableArray<NSURL *> *newUrls;
-+    if(controller.documentPickerMode == UIDocumentPickerModeOpen) {
 +        newUrls = [urls mutableCopy];
+     }
+     if(controller.documentPickerMode == UIDocumentPickerModeImport) {
+         newUrls = [NSMutableArray new];
