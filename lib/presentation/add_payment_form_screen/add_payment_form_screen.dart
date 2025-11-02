@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/paiements_service.dart';
+import '../../widgets/animated/animated_form_section.dart';
 
 class AddPaymentFormScreen extends StatefulWidget {
   const AddPaymentFormScreen({super.key});
@@ -48,6 +49,556 @@ class _AddPaymentFormScreenState extends State<AddPaymentFormScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _chooseBail(BuildContext context) async {
+    final selected = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _LocalSelectorBottomSheet(service: _service),
+    );
+
+    if (selected != null) {
+      final bail = selected['baux'];
+      setState(() {
+        _selectedBailId = bail['id'];
+        _selectedBail = bail;
+        _selectedLocal = selected;
+        _statutPaiements = null;
+        _moisSelectionne = null;
+        _paiementExistant = null;
+      });
+
+      try {
+        final statut = await _service.getStatutPaiementsBail(bail['id']);
+        setState(() {
+          _statutPaiements = statut;
+          if ((statut['arrieres'] as List).isNotEmpty) {
+            _moisSelectionne = statut['arrieres'][0]['mois'] as String?;
+          } else {
+            _moisSelectionne = statut['mois_actuel']['mois'] as String?;
+          }
+        });
+      } catch (e) {
+        print('Erreur: $e');
+      }
+    }
+  }
+
+  Widget _buildLocalSelector(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final hasSelection = _selectedLocal != null;
+
+    String title = 'Rechercher un local';
+    String subtitle = 'Associez ce paiement à un bail existant';
+
+    if (hasSelection) {
+      final numero = _selectedLocal!['numero'];
+      final commercant = _selectedBail!['commercants']['nom'];
+      title = '${numero ?? 'Local'} • $commercant';
+      subtitle = 'Bail #${_selectedBail!['numero_contrat']}';
+    }
+
+    return InkWell(
+      onTap: () => _chooseBail(context),
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest
+              .withValues(alpha: hasSelection ? 0.2 : 0.12),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: hasSelection
+                ? colorScheme.primary.withValues(alpha: 0.45)
+                : colorScheme.outlineVariant.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colorScheme.primary.withValues(alpha: 0.12),
+              ),
+              child: Icon(Icons.storefront, color: colorScheme.primary),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: hasSelection
+                              ? colorScheme.onSurface
+                              : colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.search, color: colorScheme.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBailSummaryCard(BuildContext context) {
+    if (_selectedBail == null) {
+      return const SizedBox.shrink();
+    }
+
+    final montantLoyer =
+        (_selectedBail!['montant_loyer'] as num?)?.toDouble() ?? 0;
+    final frequency =
+        _selectedBail!['frequence_paiement']?.toString().toLowerCase() ??
+            'mensuel';
+
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.blue.shade100,
+            ),
+            child: const Icon(Icons.payments, color: Colors.blue),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${montantLoyer.toStringAsFixed(0)} FCFA',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        color: Colors.blue.shade800,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Loyer $frequency • ${_selectedBail!['commercants']['nom']}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.blueGrey.shade700,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMoisSelection(BuildContext context) {
+    final statut = _statutPaiements!;
+    final arrieres =
+        List<Map<String, dynamic>>.from(statut['arrieres'] as List);
+    final tousMois =
+        List<Map<String, dynamic>>.from(statut['tous_mois'] as List);
+    final moisActuelSolde = statut['mois_actuel_solde'] == true;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (moisActuelSolde)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              border: Border.all(color: Colors.green.shade200),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.green),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Le mois en cours est déjà soldé',
+                    style: TextStyle(color: Colors.green.shade900),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (moisActuelSolde) const SizedBox(height: 16),
+        Text(
+          'Sélection du mois *',
+          style: Theme.of(context)
+              .textTheme
+              .titleSmall
+              ?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
+        if (arrieres.isNotEmpty) ...[
+          Text(
+            'Mois en retard (${arrieres.length})',
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final mois in arrieres)
+            _buildMoisRadioTile(context, mois, highlightRetard: true),
+          const Divider(height: 24),
+        ],
+        Text(
+          'Autres mois disponibles',
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: Colors.grey.shade700),
+        ),
+        const SizedBox(height: 8),
+        for (final mois in tousMois.where((m) => m['est_solde'] != true))
+          _buildMoisRadioTile(context, mois),
+      ],
+    );
+  }
+
+  Widget _buildMoisRadioTile(
+    BuildContext context,
+    Map<String, dynamic> mois, {
+    bool highlightRetard = false,
+  }) {
+    final value = mois['mois'] as String;
+    final reste = (mois['reste'] as num).toDouble();
+    final isCurrent = mois['est_actuel'] == true;
+
+    return RadioListTile<String>(
+      title: Text(mois['mois_label'].toString()),
+      subtitle: Text('Reste: ${reste.toStringAsFixed(0)} FCFA'),
+      value: value,
+      groupValue: _moisSelectionne,
+      onChanged: (selected) async {
+        setState(() => _moisSelectionne = selected);
+
+        if (_selectedBailId != null && selected != null) {
+          final existant =
+              await _service.getPaiementEnAttente(_selectedBailId!, selected);
+          setState(() => _paiementExistant = existant);
+        }
+      },
+      secondary: highlightRetard
+          ? Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.red.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'RETARD',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.red.shade900,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            )
+          : isCurrent
+              ? const Icon(Icons.calendar_today, color: Colors.blue)
+              : null,
+    );
+  }
+
+  Widget _buildExistingPaymentAlert(BuildContext context) {
+    if (_paiementExistant == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        border: Border.all(color: Colors.orange.shade300, width: 2),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber, color: Colors.orange.shade700),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Un paiement existe déjà pour ce mois',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange.shade900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Montant attendu: ${(_paiementExistant!['montant'] as num).toStringAsFixed(0)} FCFA',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
+          Text(
+            'Statut: ${_paiementExistant!['statut']}',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Vous pouvez valider ce paiement ou créer un paiement partiel supplémentaire.',
+            style: TextStyle(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentDetails(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_paiementExistant != null) ...[
+          _buildExistingPaymentAlert(context),
+          const SizedBox(height: 16),
+        ],
+        Text(
+          'Montant payé (FCFA) *',
+          style: Theme.of(context)
+              .textTheme
+              .titleSmall
+              ?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _montantController,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            hintText: 'Ex: 150000',
+            prefixIcon: const Icon(Icons.payments),
+            suffixText: 'FCFA',
+            filled: true,
+            fillColor:
+                colorScheme.surfaceContainerHighest.withValues(alpha: 0.12),
+          ),
+          keyboardType: TextInputType.number,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+          ],
+          onChanged: (value) {
+            if (_selectedBail != null && value.isNotEmpty) {
+              setState(() {});
+            }
+          },
+          validator: (value) {
+            if (value?.isEmpty ?? true) return 'Montant requis';
+
+            final montant = double.tryParse(value!);
+            if (montant == null) return 'Montant invalide';
+
+            if (_statutPaiements != null && _moisSelectionne != null) {
+              final moisData = (_statutPaiements!['tous_mois'] as List)
+                  .firstWhere((m) => m['mois'] == _moisSelectionne);
+              final reste = (moisData['reste'] as num).toDouble();
+
+              if (montant > reste) {
+                return 'Maximum: ${reste.toStringAsFixed(0)} FCFA';
+              }
+            }
+
+            if (montant <= 0) return 'Montant doit être > 0';
+
+            return null;
+          },
+        ),
+        if (_selectedBail != null && _montantController.text.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _buildMontantFeedback(context),
+        ],
+        const SizedBox(height: 16),
+        Text(
+          'Mode de paiement *',
+          style: Theme.of(context)
+              .textTheme
+              .titleSmall
+              ?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: _modePaiement,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            prefixIcon: const Icon(Icons.account_balance_wallet),
+          ),
+          items: ['Espèces', 'Virement', 'Chèque', 'Mobile Money']
+              .map(
+                (mode) => DropdownMenuItem(
+                  value: mode,
+                  child: Text(mode),
+                ),
+              )
+              .toList(),
+          onChanged: (value) => setState(() => _modePaiement = value!),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Notes (optionnel)',
+          style: Theme.of(context)
+              .textTheme
+              .titleSmall
+              ?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _notesController,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            hintText: 'Ex: Paiement partiel... ',
+            prefixIcon: const Icon(Icons.note),
+          ),
+          maxLines: 3,
+        ),
+        const SizedBox(height: 24),
+        if (_paiementExistant != null)
+          Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed:
+                      _isSaving ? null : () => _validerPaiementExistant(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Valider le paiement existant',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text('ou', style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: OutlinedButton(
+                  onPressed: _isSaving ? null : _savePaiement,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.green),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Créer paiement partiel supplémentaire',
+                    style: TextStyle(fontSize: 14, color: Colors.green),
+                  ),
+                ),
+              ),
+            ],
+          )
+        else
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _isSaving ? null : _savePaiement,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: _isSaving
+                  ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Text('Enregistrement en cours...'),
+                      ],
+                    )
+                  : const Text(
+                      'Enregistrer le paiement',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildMontantFeedback(BuildContext context) {
+    final montantSaisi = double.tryParse(_montantController.text) ?? 0;
+    final montantLoyer = (_selectedBail!['montant_loyer'] as num).toDouble();
+    final estTropEleve = montantSaisi > montantLoyer;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: estTropEleve ? Colors.red.shade50 : Colors.grey.shade100,
+        border: estTropEleve ? Border.all(color: Colors.red, width: 2) : null,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            estTropEleve ? Icons.error_outline : Icons.info_outline,
+            size: 20,
+            color: estTropEleve ? Colors.red : Colors.black,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              estTropEleve
+                  ? '❌ Montant supérieur au loyer (${montantLoyer.toStringAsFixed(0)} FCFA)'
+                  : _calculerStatut(montantSaisi, montantLoyer),
+              style: TextStyle(
+                fontSize: 13,
+                color: estTropEleve ? Colors.red.shade900 : Colors.black,
+                fontWeight: estTropEleve ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _calculerStatut(double montant, double montantLoyer) {
@@ -136,477 +687,55 @@ class _AddPaymentFormScreenState extends State<AddPaymentFormScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(vertical: 16),
               child: Form(
                 key: _formKey,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Local *',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: () async {
-                        final selected =
-                            await showModalBottomSheet<Map<String, dynamic>>(
-                          context: context,
-                          isScrollControlled: true,
-                          builder: (context) =>
-                              _LocalSelectorBottomSheet(service: _service),
-                        );
-
-                        if (selected != null) {
-                          final bail = selected['baux'];
-                          setState(() {
-                            _selectedBailId = bail['id'];
-                            _selectedBail = bail;
-                            _selectedLocal = selected;
-                          });
-
-                          try {
-                            final statut = await _service
-                                .getStatutPaiementsBail(bail['id']);
-                            setState(() {
-                              _statutPaiements = statut;
-                              if ((statut['arrieres'] as List).isNotEmpty) {
-                                _moisSelectionne =
-                                    statut['arrieres'][0]['mois'];
-                              } else {
-                                _moisSelectionne =
-                                    statut['mois_actuel']['mois'];
-                              }
-                            });
-                          } catch (e) {
-                            print('Erreur: $e');
-                          }
-                        }
-                      },
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.store),
-                          suffixIcon: Icon(Icons.search),
-                        ),
-                        child: Text(
-                          _selectedLocal != null
-                              ? '${_selectedLocal!['numero']} - ${_selectedBail!['commercants']['nom']}'
-                              : 'Rechercher un local',
-                          style: TextStyle(
-                              color: _selectedLocal != null
-                                  ? Colors.black
-                                  : Colors.grey),
-                        ),
-                      ),
-                    ),
-                    if (_selectedBail != null) ...[
-                      const SizedBox(height: 8),
-                      Card(
-                        color: Colors.blue.shade50,
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Loyer mensuel:',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              Text(
-                                '${(_selectedBail!['montant_loyer'] as num).toStringAsFixed(0)} FCFA',
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (_statutPaiements != null) ...[
-                      const SizedBox(height: 16),
-                      if (_statutPaiements!['mois_actuel_solde'] == true)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            border: Border.all(color: Colors.green.shade300),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.check_circle,
-                                  color: Colors.green),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  'Le mois en cours est déjà soldé',
-                                  style:
-                                      TextStyle(color: Colors.green.shade900),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      const SizedBox(height: 16),
-                      const Text('Mois à payer *',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      if ((_statutPaiements!['arrieres'] as List)
-                          .isNotEmpty) ...[
-                        Text(
-                          'Mois en retard (${(_statutPaiements!['arrieres'] as List).length})',
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.red,
-                              fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        ...(_statutPaiements!['arrieres'] as List).map((mois) {
-                          return RadioListTile<String>(
-                            title: Text(mois['mois_label']),
-                            subtitle: Text(
-                                'Reste: ${mois['reste'].toStringAsFixed(0)} FCFA'),
-                            value: mois['mois'],
-                            groupValue: _moisSelectionne,
-                            onChanged: (value) async {
-                              setState(() => _moisSelectionne = value);
-
-                              // Vérifie si paiement en attente existe
-                              if (_selectedBailId != null && value != null) {
-                                final existant =
-                                    await _service.getPaiementEnAttente(
-                                        _selectedBailId!, value);
-                                setState(() => _paiementExistant = existant);
-                              }
-                            },
-                            secondary: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.red.shade100,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text('RETARD',
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.red.shade900)),
-                            ),
-                          );
-                        }).toList(),
-                        const Divider(),
-                      ],
-                      const Text('Autres mois',
-                          style: TextStyle(fontSize: 12, color: Colors.grey)),
-                      const SizedBox(height: 8),
-                      ...(_statutPaiements!['tous_mois'] as List)
-                          .where((m) => !m['est_solde'])
-                          .map((mois) {
-                        return RadioListTile<String>(
-                          title: Text(mois['mois_label']),
-                          subtitle: Text(
-                              'Reste: ${mois['reste'].toStringAsFixed(0)} FCFA'),
-                          value: mois['mois'],
-                          groupValue: _moisSelectionne,
-                          onChanged: (value) async {
-                            setState(() => _moisSelectionne = value);
-
-                            // Vérifie si paiement en attente existe
-                            if (_selectedBailId != null && value != null) {
-                              final existant =
-                                  await _service.getPaiementEnAttente(
-                                      _selectedBailId!, value);
-                              setState(() => _paiementExistant = existant);
-                            }
-                          },
-                          secondary: mois['est_actuel']
-                              ? const Icon(Icons.calendar_today,
-                                  color: Colors.blue)
-                              : null,
-                        );
-                      }).toList(),
-                    ],
-
-                    // Alerte si paiement existant APRÈS les radio buttons
-                    if (_paiementExistant != null) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          border: Border.all(
-                              color: Colors.orange.shade300, width: 2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.warning_amber,
-                                    color: Colors.orange.shade700),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Un paiement existe déjà pour ce mois',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.orange.shade900,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Montant attendu: ${(_paiementExistant!['montant'] as num).toStringAsFixed(0)} FCFA',
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade700),
-                            ),
-                            Text(
-                              'Statut: ${_paiementExistant!['statut']}',
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade700),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Vous pouvez valider ce paiement ou créer un paiement partiel supplémentaire.',
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade700),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Montant payé (FCFA) *',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _montantController,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: 'Ex: 150000',
-                        prefixIcon: Icon(Icons.payments),
-                        suffixText: 'FCFA',
-                      ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                      ],
-                      onChanged: (value) {
-                        if (_selectedBail != null && value.isNotEmpty) {
-                          setState(() {});
-                        }
-                      },
-                      validator: (value) {
-                        if (value?.isEmpty ?? true) return 'Montant requis';
-
-                        final montant = double.tryParse(value!);
-                        if (montant == null) return 'Montant invalide';
-
-                        if (_statutPaiements != null &&
-                            _moisSelectionne != null) {
-                          final moisData = (_statutPaiements!['tous_mois']
-                                  as List)
-                              .firstWhere((m) => m['mois'] == _moisSelectionne);
-                          final reste = moisData['reste'] as double;
-
-                          if (montant > reste) {
-                            return 'Maximum: ${reste.toStringAsFixed(0)} FCFA';
-                          }
-                        }
-
-                        if (montant <= 0) return 'Montant doit être > 0';
-
-                        return null;
-                      },
-                    ),
-                    if (_selectedBail != null &&
-                        _montantController.text.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Builder(
-                        builder: (context) {
-                          final montantSaisi =
-                              double.tryParse(_montantController.text) ?? 0;
-                          final montantLoyer =
-                              (_selectedBail!['montant_loyer'] as num)
-                                  .toDouble();
-                          final estTropEleve = montantSaisi > montantLoyer;
-
-                          return Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: estTropEleve
-                                  ? Colors.red.shade50
-                                  : Colors.grey.shade100,
-                              border: estTropEleve
-                                  ? Border.all(
-                                      color: Colors.red,
-                                      width: 2,
-                                    )
-                                  : null,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  estTropEleve
-                                      ? Icons.error_outline
-                                      : Icons.info_outline,
-                                  size: 20,
-                                  color:
-                                      estTropEleve ? Colors.red : Colors.black,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    estTropEleve
-                                        ? '❌ Montant supérieur au loyer (${montantLoyer.toStringAsFixed(0)} FCFA)'
-                                        : _calculerStatut(
-                                            montantSaisi,
-                                            montantLoyer,
-                                          ),
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: estTropEleve
-                                          ? Colors.red.shade900
-                                          : Colors.black,
-                                      fontWeight: estTropEleve
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Mode de paiement *',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _modePaiement,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.account_balance_wallet),
-                      ),
-                      items: ['Espèces', 'Virement', 'Chèque', 'Mobile Money']
-                          .map(
-                            (mode) => DropdownMenuItem(
-                              value: mode,
-                              child: Text(mode),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) =>
-                          setState(() => _modePaiement = value!),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Notes (optionnel)',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _notesController,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: 'Ex: Paiement partiel...',
-                        prefixIcon: Icon(Icons.note),
-                      ),
-                      maxLines: 3,
-                    ),
-                    const SizedBox(height: 32),
-
-                    // Modifie bouton Enregistrer avec 2 options
-                    if (_paiementExistant != null)
-                      Column(
+                    AnimatedFormSection(
+                      title: 'Local et bail',
+                      description:
+                          'Associez le paiement au bail concerné et consultez le loyer de référence.',
+                      icon: Icons.storefront,
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(
-                            width: double.infinity,
-                            height: 50,
-                            child: ElevatedButton(
-                              onPressed: _isSaving
-                                  ? null
-                                  : () => _validerPaiementExistant(),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8)),
-                              ),
-                              child: const Text('Valider le paiement existant',
-                                  style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold)),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text('ou',
-                              style: TextStyle(color: Colors.grey)),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 50,
-                            child: OutlinedButton(
-                              onPressed: _isSaving ? null : _savePaiement,
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Colors.green),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8)),
-                              ),
-                              child: const Text(
-                                  'Créer paiement partiel supplémentaire',
-                                  style: TextStyle(
-                                      fontSize: 14, color: Colors.green)),
-                            ),
-                          ),
+                          _buildLocalSelector(context),
+                          _buildBailSummaryCard(context),
                         ],
-                      )
-                    else
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: _isSaving ? null : _savePaiement,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: _isSaving
-                              ? const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                            color: Colors.white,
-                                            strokeWidth: 2)),
-                                    SizedBox(width: 12),
-                                    Text('Enregistrement...'),
-                                  ],
-                                )
-                              : const Text('Enregistrer le paiement',
-                                  style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold)),
-                        ),
                       ),
+                    ),
+                    AnimatedFormSection(
+                      title: 'Mois à encaisser',
+                      description: _statutPaiements != null
+                          ? 'Choisissez le mois concerné et visualisez les éventuels retards.'
+                          : 'Sélectionnez un bail pour afficher les mois disponibles.',
+                      icon: Icons.calendar_month,
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 16),
+                      child: _statutPaiements != null
+                          ? _buildMoisSelection(context)
+                          : const Text(
+                              'Sélectionnez un bail pour voir les mois disponibles.',
+                            ),
+                    ),
+                    AnimatedFormSection(
+                      title: 'Détails du paiement',
+                      description:
+                          'Renseignez le montant encaissé et les informations complémentaires.',
+                      icon: Icons.payments_rounded,
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 16),
+                      child: _buildPaymentDetails(context),
+                    ),
                   ],
                 ),
               ),

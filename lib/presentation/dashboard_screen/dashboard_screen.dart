@@ -14,10 +14,11 @@ import '../../services/paiements_service.dart';
 import '../../services/rapport_service.dart';
 import '../../services/sync_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/animated/animated_dashboard_hero.dart';
+import '../../widgets/animated/animated_drawer_tile.dart';
 import '../../widgets/custom_bottom_bar.dart';
 import '../../widgets/notification_badge.dart';
 import '../documents_screen/documents_screen.dart';
-import 'widgets/animated_dashboard_hero.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -2207,48 +2208,56 @@ class _DashboardScreenState extends State<DashboardScreen>
                     Icons.dashboard_rounded,
                     AppRoutes.dashboardScreen,
                     isSelected: true,
+                    description: 'Vue d\'ensemble en temps réel',
                   ),
                   _buildModernDrawerItem(
                     context,
                     'Locaux',
                     Icons.business_rounded,
                     AppRoutes.propertiesManagementScreen,
+                    description: 'Gestion des propriétés et étages',
                   ),
                   _buildModernDrawerItem(
                     context,
                     'Commerçants',
                     Icons.store_rounded,
                     AppRoutes.merchantsManagementScreen,
+                    description: 'Suivi des marchands actifs',
                   ),
                   _buildModernDrawerItem(
                     context,
                     'Baux',
                     Icons.description_rounded,
                     AppRoutes.leaseManagementScreen,
+                    description: 'Contrats et échéances',
                   ),
                   _buildModernDrawerItem(
                     context,
                     'Paiements',
                     Icons.payment_rounded,
                     AppRoutes.paymentsManagementScreen,
+                    description: 'Encaissements et relances',
                   ),
                   _buildModernDrawerItem(
                     context,
                     'Documents',
                     Icons.folder_rounded,
                     AppRoutes.documentsScreen,
+                    description: 'Contrats, reçus et pièces jointes',
                   ),
                   _buildModernDrawerItem(
                     context,
                     'Rapports',
                     Icons.assessment_rounded,
                     AppRoutes.reportsScreen,
+                    description: 'Exports PDF et analyses',
                   ),
                   _buildModernDrawerItem(
                     context,
                     'Statistiques',
                     Icons.analytics_rounded,
                     AppRoutes.statisticsScreen,
+                    description: 'Tableaux de bord avancés',
                   ),
                   Divider(height: 32, thickness: 1),
                   _buildModernDrawerItem(
@@ -2256,12 +2265,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                     'Paiements en retard',
                     Icons.warning_rounded,
                     AppRoutes.overduePaymentsScreen,
+                    description: 'Suivi des impayés et actions',
                   ),
                   _buildModernDrawerItem(
                     context,
                     'Baux expirant',
                     Icons.timer_rounded,
                     AppRoutes.expiringLeasesScreen,
+                    description: 'Contrats à renouveler',
                   ),
                   Divider(height: 32, thickness: 1),
                   _buildModernDrawerItem(
@@ -2269,6 +2280,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     'Paramètres',
                     Icons.settings_rounded,
                     AppRoutes.settingsScreen,
+                    description: 'Personnalisation et préférences',
                   ),
                 ],
               ),
@@ -2285,74 +2297,25 @@ class _DashboardScreenState extends State<DashboardScreen>
     IconData icon,
     String route, {
     bool isSelected = false,
+    String? description,
   }) {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            Navigator.pop(context);
-            if (!isSelected) {
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                route,
-                (route) => false,
-              );
-            }
-          },
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? AppTheme.primary.withAlpha(26)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppTheme.primary.withAlpha(51)
-                        : AppTheme.textLabel.withAlpha(26),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    icon,
-                    color:
-                        isSelected ? AppTheme.primary : AppTheme.textSecondary,
-                    size: 20,
-                  ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: isSelected
-                              ? AppTheme.primary
-                              : AppTheme.textPrimary,
-                          fontWeight:
-                              isSelected ? FontWeight.w600 : FontWeight.w500,
-                        ),
-                  ),
-                ),
-                if (isSelected)
-                  Container(
-                    width: 4,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: AnimatedDrawerTile(
+        title: title,
+        icon: icon,
+        isSelected: isSelected,
+        description: description,
+        onTap: () {
+          Navigator.pop(context);
+          if (!isSelected) {
+            Navigator.pushNamedAndRemoveUntil(
+              context,
+              route,
+              (route) => false,
+            );
+          }
+        },
       ),
     );
   }

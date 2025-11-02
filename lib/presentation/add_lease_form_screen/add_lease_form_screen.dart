@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../services/bail_validation_service.dart';
 import '../../services/leases_service.dart';
+import '../../widgets/animated/animated_form_section.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/validated_text_form_field.dart';
 
@@ -537,27 +538,219 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
     );
   }
 
-  Widget _buildFormSection(String? title, Widget child) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 1.h),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (title != null && title.isNotEmpty) ...[
-            Text(
-              title,
-              style: GoogleFonts.inter(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: Colors.black87,
+  Widget _buildFormSection(
+    String? title,
+    Widget child, {
+    String? description,
+    IconData? icon,
+  }) {
+    return AnimatedFormSection(
+      title: title,
+      description: description,
+      icon: icon,
+      margin: EdgeInsets.symmetric(horizontal: 4.w, vertical: 1.2.h),
+      padding: EdgeInsets.symmetric(
+        horizontal: 3.w,
+        vertical: title == null ? 3.w : 2.6.w,
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildSelectionTile(
+    BuildContext context, {
+    required IconData icon,
+    required String placeholder,
+    required String? value,
+    String? subtitle,
+    required VoidCallback onTap,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isSelected = value != null && value.isNotEmpty;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        padding: EdgeInsets.symmetric(horizontal: 3.w, vertical: 2.4.w),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest
+              .withValues(alpha: isSelected ? 0.22 : 0.12),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? colorScheme.primary.withValues(alpha: 0.45)
+                : colorScheme.outlineVariant.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(2.4.w),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colorScheme.primary.withValues(alpha: 0.12),
+              ),
+              child: Icon(icon, color: colorScheme.primary, size: 20),
+            ),
+            SizedBox(width: 3.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isSelected ? value : placeholder,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected
+                          ? colorScheme.onSurface
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (isSelected && subtitle != null && subtitle.isNotEmpty)
+                    Padding(
+                      padding: EdgeInsets.only(top: 0.8.h),
+                      child: Text(
+                        subtitle,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
-            SizedBox(height: 1.h),
+            Icon(
+              Icons.chevron_right,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+            ),
           ],
-          child,
-        ],
+        ),
       ),
     );
+  }
+
+  Widget _buildDateField(
+    BuildContext context, {
+    required String label,
+    required DateTime? value,
+    required VoidCallback onTap,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    final display = value != null
+        ? '${value.day}/${value.month}/${value.year}'
+        : 'Sélectionner $label';
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        padding: EdgeInsets.symmetric(horizontal: 3.w, vertical: 2.4.w),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: value != null
+                ? colorScheme.primary.withValues(alpha: 0.5)
+                : colorScheme.outlineVariant.withValues(alpha: 0.4),
+          ),
+          color: colorScheme.surfaceContainerHighest
+              .withValues(alpha: value != null ? 0.22 : 0.1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(2.2.w),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colorScheme.primary.withValues(alpha: 0.12),
+              ),
+              child: Icon(Icons.calendar_today,
+                  color: colorScheme.primary, size: 18),
+            ),
+            SizedBox(width: 3.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: textTheme.labelMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(height: 0.6.h),
+                  Text(
+                    display,
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: value != null
+                          ? colorScheme.onSurface
+                          : colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _localSubtitle(Map<String, dynamic>? local) {
+    if (local == null) return null;
+    final details = <String>[];
+
+    final niveau = local['niveau'] ?? local['niveau_nom'] ?? local['etage'];
+    if (niveau != null && niveau.toString().trim().isNotEmpty) {
+      details.add('Niveau ${niveau.toString()}');
+    }
+
+    final surface = local['surface'] ?? local['superficie'];
+    if (surface is num) {
+      final formatted = surface % 1 == 0
+          ? surface.toStringAsFixed(0)
+          : surface.toStringAsFixed(1);
+      details.add('$formatted m²');
+    } else if (surface != null && surface.toString().trim().isNotEmpty) {
+      details.add('${surface.toString()} m²');
+    }
+
+    if (details.isEmpty) return null;
+    return details.join(' • ');
+  }
+
+  String? _localTitle(Map<String, dynamic>? local) {
+    if (local == null) return null;
+    final parts = <String>[];
+    final numero = local['numero'];
+    if (numero != null && numero.toString().trim().isNotEmpty) {
+      parts.add(numero.toString());
+    }
+    final type = local['types_locaux']?['nom'];
+    if (type != null && type.toString().trim().isNotEmpty) {
+      parts.add(type.toString());
+    }
+    if (parts.isEmpty) return null;
+    return parts.join(' • ');
+  }
+
+  String? _merchantSubtitle(Map<String, dynamic>? merchant) {
+    if (merchant == null) return null;
+    final activity = merchant['activite'] ?? merchant['activity'];
+    if (activity == null) return null;
+    final activityStr = activity.toString().trim();
+    if (activityStr.isEmpty) return null;
+    return 'Activité: $activityStr';
   }
 
   Widget _buildDepositSection() {
@@ -566,62 +759,67 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
         // Type de dépôt (Radio buttons)
         _buildFormSection(
           'Type de dépôt',
-          Container(
-            padding: EdgeInsets.all(2.w),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey[300]!),
-              borderRadius: BorderRadius.circular(12),
-              color: Colors.white,
-            ),
-            child: Column(
-              children: [
-                RadioListTile<String>(
-                  title: Text(
-                    'Caution (remboursable)',
-                    style: GoogleFonts.inter(fontSize: 14),
-                  ),
-                  subtitle: Text(
-                    'Montant remboursable en fin de bail',
-                    style: GoogleFonts.inter(
-                        fontSize: 12, color: Colors.grey[600]),
-                  ),
-                  value: 'caution',
-                  groupValue: _depositType,
-                  onChanged: (value) {
-                    setState(() => _depositType = value!);
-                    HapticFeedback.lightImpact();
-                  },
-                  activeColor: Theme.of(context).primaryColor,
+          Column(
+            children: [
+              RadioListTile<String>(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'Caution (remboursable)',
+                  style: GoogleFonts.inter(fontSize: 14),
                 ),
-                Divider(height: 1, color: Colors.grey[200]),
-                RadioListTile<String>(
-                  title: Text(
-                    'Pas de porte (non-remboursable)',
-                    style: GoogleFonts.inter(fontSize: 14),
+                subtitle: Text(
+                  'Montant restitué au commerçant en fin de bail',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                  subtitle: Text(
-                    'Montant versé pour obtenir le local',
-                    style: GoogleFonts.inter(
-                        fontSize: 12, color: Colors.grey[600]),
-                  ),
-                  value: 'pas_de_porte',
-                  groupValue: _depositType,
-                  onChanged: (value) {
-                    setState(() => _depositType = value!);
-                    HapticFeedback.lightImpact();
-                  },
-                  activeColor: Theme.of(context).primaryColor,
                 ),
-              ],
-            ),
+                value: 'caution',
+                groupValue: _depositType,
+                onChanged: (value) {
+                  setState(() => _depositType = value!);
+                  HapticFeedback.lightImpact();
+                },
+                activeColor: Theme.of(context).primaryColor,
+              ),
+              Divider(
+                height: 0,
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+              RadioListTile<String>(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'Pas de porte (non-remboursable)',
+                  style: GoogleFonts.inter(fontSize: 14),
+                ),
+                subtitle: Text(
+                  'Somme versée pour garantir l’accès au local',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                value: 'pas_de_porte',
+                groupValue: _depositType,
+                onChanged: (value) {
+                  setState(() => _depositType = value!);
+                  HapticFeedback.lightImpact();
+                },
+                activeColor: Theme.of(context).primaryColor,
+              ),
+            ],
           ),
+          description: 'Précisez le mécanisme financier appliqué',
+          icon: Icons.safety_check_rounded,
         ),
 
         SizedBox(height: 1.h),
 
         // Montant du dépôt
         _buildFormSection(
-          null,
+          'Montant du dépôt',
           ValidatedTextFormField(
             controller: _depositAmountController,
             label:
@@ -1072,7 +1270,12 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
               // REPLACED Property selection with searchable bottom sheet
               _buildFormSection(
                 'Local *',
-                GestureDetector(
+                _buildSelectionTile(
+                  context,
+                  icon: Icons.store_mall_directory,
+                  placeholder: 'Rechercher un local',
+                  value: _localTitle(_selectedLocalData),
+                  subtitle: _localSubtitle(_selectedLocalData),
                   onTap: () async {
                     final selected =
                         await showModalBottomSheet<Map<String, dynamic>>(
@@ -1089,41 +1292,20 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
                       });
                     }
                   },
-                  child: Container(
-                    padding: EdgeInsets.all(3.w),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[400]!),
-                      borderRadius: BorderRadius.circular(12),
-                      color: Colors.white,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.store, color: Colors.grey[600]),
-                        SizedBox(width: 3.w),
-                        Expanded(
-                          child: Text(
-                            _selectedLocalData != null
-                                ? '${_selectedLocalData!['numero']} - ${_selectedLocalData!['types_locaux']?['nom']}'
-                                : 'Rechercher un local',
-                            style: GoogleFonts.inter(
-                              color: _selectedLocalData != null
-                                  ? Colors.black87
-                                  : Colors.grey[600],
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                        Icon(Icons.search, color: Colors.grey[600]),
-                      ],
-                    ),
-                  ),
                 ),
+                description: 'Sélectionnez un local disponible pour le bail',
+                icon: Icons.storefront,
               ),
 
               // REPLACED Merchant selection with searchable bottom sheet
               _buildFormSection(
                 'Commerçant *',
-                GestureDetector(
+                _buildSelectionTile(
+                  context,
+                  icon: Icons.person_pin_circle,
+                  placeholder: 'Rechercher un commerçant',
+                  value: _selectedCommercantData?['nom']?.toString(),
+                  subtitle: _merchantSubtitle(_selectedCommercantData),
                   onTap: () async {
                     final selected =
                         await showModalBottomSheet<Map<String, dynamic>>(
@@ -1140,85 +1322,42 @@ class _AddLeaseFormScreenState extends State<AddLeaseFormScreen> {
                       });
                     }
                   },
-                  child: Container(
-                    padding: EdgeInsets.all(3.w),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[400]!),
-                      borderRadius: BorderRadius.circular(12),
-                      color: Colors.white,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.person, color: Colors.grey[600]),
-                        SizedBox(width: 3.w),
-                        Expanded(
-                          child: Text(
-                            _selectedCommercantData != null
-                                ? _selectedCommercantData!['nom']
-                                : 'Rechercher un commerçant',
-                            style: GoogleFonts.inter(
-                              color: _selectedCommercantData != null
-                                  ? Colors.black87
-                                  : Colors.grey[600],
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                        Icon(Icons.search, color: Colors.grey[600]),
-                      ],
-                    ),
-                  ),
                 ),
+                description:
+                    'Associez le commerçant responsable de ce nouveau bail',
+                icon: Icons.people_alt_rounded,
               ),
 
               // Date selection section
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4.w),
-                child: Row(
+              _buildFormSection(
+                'Période du bail',
+                Column(
                   children: [
-                    // Start date
-                    Expanded(
-                      child: _buildFormSection(
-                        'Date début *',
-                        InkWell(
-                          onTap: () => _selectDate(context, true),
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.calendar_today),
-                            ),
-                            child: Text(
-                              _dateDebut != null
-                                  ? '${_dateDebut!.day}/${_dateDebut!.month}/${_dateDebut!.year}'
-                                  : 'Sélectionner date début',
-                            ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildDateField(
+                            context,
+                            label: 'Date début *',
+                            value: _dateDebut,
+                            onTap: () => _selectDate(context, true),
                           ),
                         ),
-                      ),
-                    ),
-                    SizedBox(width: 2.w),
-                    // End date
-                    Expanded(
-                      child: _buildFormSection(
-                        'Date fin *',
-                        InkWell(
-                          onTap: () => _selectDate(context, false),
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.calendar_today),
-                            ),
-                            child: Text(
-                              _dateFin != null
-                                  ? '${_dateFin!.day}/${_dateFin!.month}/${_dateFin!.year}'
-                                  : 'Sélectionner date fin',
-                            ),
+                        SizedBox(width: 2.w),
+                        Expanded(
+                          child: _buildDateField(
+                            context,
+                            label: 'Date fin *',
+                            value: _dateFin,
+                            onTap: () => _selectDate(context, false),
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
+                description: 'Définissez la période couverte par ce bail',
+                icon: Icons.calendar_month,
               ),
 
               // Rent amount
