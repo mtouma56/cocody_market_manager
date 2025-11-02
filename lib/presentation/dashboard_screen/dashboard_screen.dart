@@ -17,6 +17,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/custom_bottom_bar.dart';
 import '../../widgets/notification_badge.dart';
 import '../documents_screen/documents_screen.dart';
+import 'widgets/animated_dashboard_hero.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -45,6 +46,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   final _sync = SyncService();
 
   bool _isLoading = true;
+  bool _isRefreshing = false;
   String? _errorMessage;
 
   // Data from Supabase
@@ -53,6 +55,21 @@ class _DashboardScreenState extends State<DashboardScreen>
   List<TendanceData> _tendancePaiements = [];
   List<EncaissementType> _encaissementsParType = [];
   Map<String, Map<String, dynamic>> _statsEtages = {};
+
+  List<FlSpot> get _trendSpots => _tendancePaiements
+      .asMap()
+      .entries
+      .map((entry) => FlSpot(entry.key.toDouble(), entry.value.montant))
+      .toList();
+
+  List<String> get _trendLabels => _tendancePaiements.map((data) {
+        final raw = DateFormat('EEE', 'fr_FR').format(data.date);
+        final formatted = toBeginningOfSentenceCase(raw);
+        if (formatted == null) {
+          return raw;
+        }
+        return formatted;
+      }).toList();
 
   @override
   void initState() {
@@ -114,61 +131,60 @@ class _DashboardScreenState extends State<DashboardScreen>
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder:
-              (context) => AlertDialog(
-                title: Row(
-                  children: [
-                    Icon(Icons.warning, color: AppTheme.warning, size: 32),
-                    SizedBox(width: 12),
-                    Text('Alerte système'),
-                  ],
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.warning, color: AppTheme.warning, size: 32),
+                SizedBox(width: 12),
+                Text('Alerte système'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '⚠️ ${conflits.length} locaux ont plusieurs baux actifs.',
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
+                SizedBox(height: 12),
+                Text(
+                  'Ceci est une erreur critique qui nécessite une intervention immédiate.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                SizedBox(height: 8),
+                ...conflits.map(
+                  (c) => Text(
+                    '• ${c['local_numero']} : ${c['nb_baux_actifs']} baux actifs',
+                    style: TextStyle(fontSize: 12, color: AppTheme.error),
+                  ),
+                ),
+                SizedBox(height: 16),
+                Row(
                   children: [
-                    Text(
-                      '⚠️ ${conflits.length} locaux ont plusieurs baux actifs.',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      'Ceci est une erreur critique qui nécessite une intervention immédiate.',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                    SizedBox(height: 8),
-                    ...conflits.map(
-                      (c) => Text(
-                        '• ${c['local_numero']} : ${c['nb_baux_actifs']} baux actifs',
-                        style: TextStyle(fontSize: 12, color: AppTheme.error),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          await _resoudreConflitsAutomatiquement();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.warning,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: Text('Résoudre automatiquement'),
                       ),
                     ),
-                    SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              Navigator.pop(context);
-                              await _resoudreConflitsAutomatiquement();
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.warning,
-                              foregroundColor: Colors.white,
-                            ),
-                            child: Text('Résoudre automatiquement'),
-                          ),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text('Ignorer pour maintenant'),
-                  ),
-                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Ignorer pour maintenant'),
               ),
+            ],
+          ),
         );
       }
     } catch (e) {
@@ -181,29 +197,28 @@ class _DashboardScreenState extends State<DashboardScreen>
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder:
-            (context) => Center(
-              child: Container(
-                padding: EdgeInsets.all(24),
-                margin: EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: AppTheme.elevatedCardShadow,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(color: AppTheme.primary),
-                    SizedBox(height: 20),
-                    Text(
-                      'Résolution des conflits en cours...',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ],
-                ),
-              ),
+        builder: (context) => Center(
+          child: Container(
+            padding: EdgeInsets.all(24),
+            margin: EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: AppTheme.elevatedCardShadow,
             ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: AppTheme.primary),
+                SizedBox(height: 20),
+                Text(
+                  'Résolution des conflits en cours...',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ],
+            ),
+          ),
+        ),
       );
 
       final resolutions = await _validationService.resoudreConflits();
@@ -211,68 +226,67 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       showDialog(
         context: context,
-        builder:
-            (context) => AlertDialog(
-              title: Row(
-                children: [
-                  Icon(Icons.check_circle, color: AppTheme.success, size: 32),
-                  SizedBox(width: 12),
-                  Text('Conflits résolus'),
-                ],
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.check_circle, color: AppTheme.success, size: 32),
+              SizedBox(width: 12),
+              Text('Conflits résolus'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '✅ ${resolutions.length} conflits ont été résolus automatiquement.',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '✅ ${resolutions.length} conflits ont été résolus automatiquement.',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 12),
-                  if (resolutions.isNotEmpty) ...[
-                    Text('Détails des résolutions :'),
-                    SizedBox(height: 8),
-                    ...resolutions.map(
-                      (r) => Container(
-                        margin: EdgeInsets.only(bottom: 8),
-                        padding: EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppTheme.success.withAlpha(26),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: AppTheme.success.withAlpha(77),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Local ${r['local_numero']}',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            Text('Bail conservé: ${r['bail_garde']}'),
-                            if (r['baux_resilies'] != null &&
-                                r['baux_resilies'].isNotEmpty)
-                              Text(
-                                'Baux résiliés: ${(r['baux_resilies'] as List).join(', ')}',
-                              ),
-                          ],
-                        ),
+              SizedBox(height: 12),
+              if (resolutions.isNotEmpty) ...[
+                Text('Détails des résolutions :'),
+                SizedBox(height: 8),
+                ...resolutions.map(
+                  (r) => Container(
+                    margin: EdgeInsets.only(bottom: 8),
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withAlpha(26),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppTheme.success.withAlpha(77),
                       ),
                     ),
-                  ],
-                ],
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _loadData();
-                  },
-                  child: Text('OK'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Local ${r['local_numero']}',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text('Bail conservé: ${r['bail_garde']}'),
+                        if (r['baux_resilies'] != null &&
+                            r['baux_resilies'].isNotEmpty)
+                          Text(
+                            'Baux résiliés: ${(r['baux_resilies'] as List).join(', ')}',
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _loadData();
+              },
+              child: Text('OK'),
             ),
+          ],
+        ),
       );
     } catch (e) {
       Navigator.pop(context);
@@ -280,12 +294,18 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool silent = false}) async {
     try {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
+      if (mounted) {
+        setState(() {
+          if (silent) {
+            _isRefreshing = true;
+          } else {
+            _isLoading = true;
+          }
+          _errorMessage = null;
+        });
+      }
 
       final results = await Future.wait([
         _dashboardService.getDashboardStats(),
@@ -295,24 +315,40 @@ class _DashboardScreenState extends State<DashboardScreen>
         _dashboardService.getStatsDetailleesEtages(),
       ]);
 
-      setState(() {
-        _dashboardStats = results[0] as DashboardStats;
-        _occupationEtages = results[1] as List<OccupationEtage>;
-        _tendancePaiements = results[2] as List<TendanceData>;
-        _encaissementsParType = results[3] as List<EncaissementType>;
-        _statsEtages = results[4] as Map<String, Map<String, dynamic>>;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _dashboardStats = results[0] as DashboardStats;
+          _occupationEtages = results[1] as List<OccupationEtage>;
+          _tendancePaiements = results[2] as List<TendanceData>;
+          _encaissementsParType = results[3] as List<EncaissementType>;
+          _statsEtages = results[4] as Map<String, Map<String, dynamic>>;
+          if (silent) {
+            _isRefreshing = false;
+          } else {
+            _isLoading = false;
+          }
+        });
+      }
 
-      // Start animations after data is loaded
-      _fadeController.forward();
-      _scaleController.forward();
+      // Restart animations after each refresh to keep the dashboard lively
+      _fadeController.forward(from: 0);
+      _scaleController.forward(from: 0);
     } catch (error) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Erreur lors du chargement des données: $error';
-      });
+      if (mounted) {
+        setState(() {
+          if (silent) {
+            _isRefreshing = false;
+          } else {
+            _isLoading = false;
+          }
+          _errorMessage = 'Erreur lors du chargement des données: $error';
+        });
+      }
     }
+  }
+
+  Future<void> _handleRefresh() async {
+    await _loadData(silent: true);
   }
 
   @override
@@ -321,12 +357,12 @@ class _DashboardScreenState extends State<DashboardScreen>
       key: _scaffoldKey,
       backgroundColor: AppTheme.background,
       extendBodyBehindAppBar: true,
+      extendBody: true,
       appBar: _buildModernAppBar(),
       drawer: _buildModernDrawer(context),
-      body:
-          _isLoading
-              ? _buildLoadingState()
-              : _errorMessage != null
+      body: _isLoading
+          ? _buildLoadingState()
+          : _errorMessage != null
               ? _buildErrorState()
               : _buildDashboardContent(),
       bottomNavigationBar: const CustomBottomBar(
@@ -367,14 +403,16 @@ class _DashboardScreenState extends State<DashboardScreen>
                     children: [
                       Text(
                         'Dashboard',
-                        style: Theme.of(context).textTheme.headlineLarge
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineLarge
                             ?.copyWith(color: AppTheme.surface),
                       ),
                       Text(
                         'Vue d\'ensemble du marché',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppTheme.surface.withAlpha(204),
-                        ),
+                              color: AppTheme.surface.withAlpha(204),
+                            ),
                       ),
                     ],
                   ),
@@ -465,31 +503,60 @@ class _DashboardScreenState extends State<DashboardScreen>
       opacity: _fadeAnimation,
       child: ScaleTransition(
         scale: _scaleAnimation,
-        child: Container(
-          margin: EdgeInsets.only(top: 120),
-          child: SingleChildScrollView(
-            padding: EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(height: 24),
-
-                // Main statistics cards with modern design
-                _buildMainStatsGrid(),
-                SizedBox(height: 24),
-
-                // Quick Actions Section with modern design
-                _buildQuickActionsSection(),
-                SizedBox(height: 24),
-
-                // Charts section with animations
-                _buildChartsSection(),
-                SizedBox(height: 24),
-
-                // Floor details with modern expansion tiles
-                _buildFloorDetailsSection(),
-                SizedBox(height: 100), // Bottom padding for better scroll
-              ],
+        child: RefreshIndicator(
+          color: AppTheme.primary,
+          backgroundColor: AppTheme.surface,
+          displacement: 56,
+          strokeWidth: 2.4,
+          onRefresh: _handleRefresh,
+          child: Container(
+            margin: const EdgeInsets.only(top: 120),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 12),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    child: _isRefreshing
+                        ? Container(
+                            key: const ValueKey('refreshing'),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            child: LinearProgressIndicator(
+                              minHeight: 4,
+                              color: Theme.of(context).colorScheme.primary,
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .primaryContainer
+                                  .withValues(alpha: 0.35),
+                            ),
+                          )
+                        : const SizedBox(key: ValueKey('idle'), height: 0),
+                  ),
+                  if (_dashboardStats != null) ...[
+                    AnimatedDashboardHero(
+                      stats: _dashboardStats!,
+                      trendSpots: _trendSpots,
+                      trendLabels: _trendLabels,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                  _buildMainStatsGrid(),
+                  const SizedBox(height: 24),
+                  _buildQuickActionsSection(),
+                  const SizedBox(height: 24),
+                  _buildChartsSection(),
+                  const SizedBox(height: 24),
+                  _buildFloorDetailsSection(),
+                  const SizedBox(height: 100),
+                ],
+              ),
             ),
           ),
         ),
@@ -575,7 +642,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ],
                 ),
                 SizedBox(height: 16),
-
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -676,7 +742,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ],
                 ),
                 SizedBox(height: 8),
-
                 Text(
                   'COLLECTE AUJOURD\'HUI',
                   style: TextStyle(
@@ -686,7 +751,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ),
                 ),
                 SizedBox(height: 8),
-
                 Expanded(
                   child: Center(
                     child: Row(
@@ -715,7 +779,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                   ),
                 ),
-
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -805,7 +868,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ],
                 ),
                 SizedBox(height: 8),
-
                 Row(
                   children: [
                     Icon(Icons.warning_amber, color: Colors.pink, size: 20),
@@ -821,7 +883,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ],
                 ),
                 SizedBox(height: 8),
-
                 Expanded(
                   child: Center(
                     child: Row(
@@ -850,7 +911,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                   ),
                 ),
-
                 Text(
                   'en retard',
                   style: TextStyle(
@@ -919,7 +979,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ],
                 ),
                 SizedBox(height: 8),
-
                 Text(
                   'PAIEMENTS EN ATTENTE',
                   style: TextStyle(
@@ -929,7 +988,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ),
                 ),
                 SizedBox(height: 8),
-
                 Expanded(
                   child: Center(
                     child: Text(
@@ -942,7 +1000,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                   ),
                 ),
-
                 LinearPercentIndicator(
                   lineHeight: 6.0,
                   percent: (_dashboardStats!.commercants / 100).clamp(0.0, 1.0),
@@ -987,7 +1044,6 @@ class _DashboardScreenState extends State<DashboardScreen>
           ],
         ),
         SizedBox(height: 16),
-
         GridView.count(
           shrinkWrap: true,
           physics: NeverScrollableScrollPhysics(),
@@ -1000,58 +1056,53 @@ class _DashboardScreenState extends State<DashboardScreen>
               icon: Icons.person_add,
               label: 'Nouveau\nCommerçant',
               color: AppTheme.secondary,
-              onTap:
-                  () => Navigator.pushNamed(
-                    context,
-                    AppRoutes.merchantsManagementScreen,
-                  ),
+              onTap: () => Navigator.pushNamed(
+                context,
+                AppRoutes.merchantsManagementScreen,
+              ),
             ),
             _buildQuickActionCard(
               icon: Icons.receipt_long,
               label: 'Nouveau\nPaiement',
               color: AppTheme.success,
-              onTap:
-                  () => Navigator.pushNamed(
-                    context,
-                    AppRoutes.addPaymentFormScreen,
-                  ),
+              onTap: () => Navigator.pushNamed(
+                context,
+                AppRoutes.addPaymentFormScreen,
+              ),
             ),
             _buildQuickActionCard(
               icon: Icons.folder,
               label: 'Documents',
               color: AppTheme.warning,
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const DocumentsScreen(),
-                    ),
-                  ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const DocumentsScreen(),
+                ),
+              ),
             ),
             _buildQuickActionCard(
               icon: Icons.assignment,
               label: 'Nouveau\nBail',
               color: AppTheme.primary,
-              onTap:
-                  () => Navigator.pushNamed(
-                    context,
-                    AppRoutes.addLeaseFormScreen,
-                  ),
+              onTap: () => Navigator.pushNamed(
+                context,
+                AppRoutes.addLeaseFormScreen,
+              ),
             ),
             _buildQuickActionCard(
               icon: Icons.analytics,
               label: 'Statistiques',
               color: Colors.indigo,
-              onTap:
-                  () =>
-                      Navigator.pushNamed(context, AppRoutes.statisticsScreen),
+              onTap: () =>
+                  Navigator.pushNamed(context, AppRoutes.statisticsScreen),
             ),
             _buildQuickActionCard(
               icon: Icons.description,
               label: 'Rapports',
               color: Colors.teal,
-              onTap:
-                  () => Navigator.pushNamed(context, AppRoutes.reportsScreen),
+              onTap: () =>
+                  Navigator.pushNamed(context, AppRoutes.reportsScreen),
             ),
           ],
         ),
@@ -1096,8 +1147,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                     label,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
+                          fontWeight: FontWeight.w500,
+                        ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1249,94 +1300,90 @@ class _DashboardScreenState extends State<DashboardScreen>
   void _showSuccessDialog(String title, String message) {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.check_circle, color: AppTheme.success, size: 28),
-                SizedBox(width: 8),
-                Text(title),
-              ],
-            ),
-            content: Text(message),
-            actions: [
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('OK'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.check_circle, color: AppTheme.success, size: 28),
+            SizedBox(width: 8),
+            Text(title),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK'),
           ),
+        ],
+      ),
     );
   }
 
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.error, color: AppTheme.error, size: 28),
-                SizedBox(width: 8),
-                Text('Erreur'),
-              ],
-            ),
-            content: Text(message),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('OK'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.error, color: AppTheme.error, size: 28),
+            SizedBox(width: 8),
+            Text('Erreur'),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK'),
           ),
+        ],
+      ),
     );
   }
 
   void _showOfflineDialog() {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.cloud_off, color: AppTheme.warning),
-                SizedBox(width: 8),
-                Text('Mode hors ligne'),
-              ],
-            ),
-            content: Text(
-              'Cette action nécessite une connexion internet.\n\n'
-              'Vous pouvez consulter les données en cache, mais les modifications '
-              'ne seront possibles qu\'une fois reconnecté.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('Compris'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.cloud_off, color: AppTheme.warning),
+            SizedBox(width: 8),
+            Text('Mode hors ligne'),
+          ],
+        ),
+        content: Text(
+          'Cette action nécessite une connexion internet.\n\n'
+          'Vous pouvez consulter les données en cache, mais les modifications '
+          'ne seront possibles qu\'une fois reconnecté.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Compris'),
           ),
+        ],
+      ),
     );
   }
 
   Future<bool?> _showConfirmationDialog(String title, String message) {
     return showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text(title),
-            content: Text(message),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text('Annuler'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text('Continuer'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Annuler'),
           ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Continuer'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1547,79 +1594,76 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
           SizedBox(height: 16),
           Expanded(
-            child:
-                hasData
-                    ? LineChart(
-                      LineChartData(
-                        gridData: FlGridData(show: false),
-                        titlesData: FlTitlesData(
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              getTitlesWidget: (value, meta) {
-                                return Text(
-                                  '${value.toInt()}M',
-                                  style: Theme.of(context).textTheme.labelSmall,
-                                );
-                              },
-                              reservedSize: 30,
-                            ),
-                          ),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              getTitlesWidget: (value, meta) {
-                                if (value.toInt() >= 0 &&
-                                    value.toInt() < labelsTendance.length) {
-                                  return Text(
-                                    labelsTendance[value.toInt()],
-                                    style:
-                                        Theme.of(context).textTheme.labelSmall,
-                                  );
-                                }
-                                return const Text('');
-                              },
-                            ),
-                          ),
-                          topTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          rightTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
+            child: hasData
+                ? LineChart(
+                    LineChartData(
+                      gridData: FlGridData(show: false),
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (value, meta) {
+                              return Text(
+                                '${value.toInt()}M',
+                                style: Theme.of(context).textTheme.labelSmall,
+                              );
+                            },
+                            reservedSize: 30,
                           ),
                         ),
-                        borderData: FlBorderData(show: false),
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots:
-                                _tendancePaiements
-                                    .asMap()
-                                    .entries
-                                    .map(
-                                      (e) => FlSpot(
-                                        e.key.toDouble(),
-                                        e.value.montant,
-                                      ),
-                                    )
-                                    .toList(),
-                            isCurved: true,
-                            color: AppTheme.secondary,
-                            barWidth: 3,
-                            dotData: const FlDotData(show: true),
-                            belowBarData: BarAreaData(
-                              show: true,
-                              color: AppTheme.secondary.withAlpha(26),
-                            ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (value, meta) {
+                              if (value.toInt() >= 0 &&
+                                  value.toInt() < labelsTendance.length) {
+                                return Text(
+                                  labelsTendance[value.toInt()],
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                );
+                              }
+                              return const Text('');
+                            },
                           ),
-                        ],
+                        ),
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
                       ),
-                    )
-                    : Center(
-                      child: Text(
-                        'Aucune donnée historique',
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
+                      borderData: FlBorderData(show: false),
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: _tendancePaiements
+                              .asMap()
+                              .entries
+                              .map(
+                                (e) => FlSpot(
+                                  e.key.toDouble(),
+                                  e.value.montant,
+                                ),
+                              )
+                              .toList(),
+                          isCurved: true,
+                          color: AppTheme.secondary,
+                          barWidth: 3,
+                          dotData: const FlDotData(show: true),
+                          belowBarData: BarAreaData(
+                            show: true,
+                            color: AppTheme.secondary.withAlpha(26),
+                          ),
+                        ),
+                      ],
                     ),
+                  )
+                : Center(
+                    child: Text(
+                      'Aucune donnée historique',
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -1664,80 +1708,76 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
           SizedBox(height: 16),
           Expanded(
-            child:
-                hasData
-                    ? BarChart(
-                      BarChartData(
-                        alignment: BarChartAlignment.spaceAround,
-                        barGroups:
-                            _encaissementsParType.asMap().entries.map((entry) {
-                              return BarChartGroupData(
-                                x: entry.key,
-                                barRods: [
-                                  BarChartRodData(
-                                    toY: entry.value.montant,
-                                    color: colors[entry.key % colors.length],
-                                    width: 20,
-                                    borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(4),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
-                        titlesData: FlTitlesData(
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              getTitlesWidget:
-                                  (value, meta) => Text(
-                                    '${value.toInt()}M',
-                                    style:
-                                        Theme.of(context).textTheme.labelSmall,
-                                  ),
-                              reservedSize: 30,
+            child: hasData
+                ? BarChart(
+                    BarChartData(
+                      alignment: BarChartAlignment.spaceAround,
+                      barGroups:
+                          _encaissementsParType.asMap().entries.map((entry) {
+                        return BarChartGroupData(
+                          x: entry.key,
+                          barRods: [
+                            BarChartRodData(
+                              toY: entry.value.montant,
+                              color: colors[entry.key % colors.length],
+                              width: 20,
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(4),
+                              ),
                             ),
-                          ),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              getTitlesWidget: (value, meta) {
-                                if (value.toInt() >= 0 &&
-                                    value.toInt() <
-                                        _encaissementsParType.length) {
-                                  return Transform.rotate(
-                                    angle: -0.785398,
-                                    child: Text(
-                                      _encaissementsParType[value.toInt()].type,
-                                      style:
-                                          Theme.of(
-                                            context,
-                                          ).textTheme.labelSmall,
-                                    ),
-                                  );
-                                }
-                                return const Text('');
-                              },
-                              reservedSize: 40,
+                          ],
+                        );
+                      }).toList(),
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (value, meta) => Text(
+                              '${value.toInt()}M',
+                              style: Theme.of(context).textTheme.labelSmall,
                             ),
-                          ),
-                          topTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          rightTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
+                            reservedSize: 30,
                           ),
                         ),
-                        gridData: const FlGridData(show: false),
-                        borderData: FlBorderData(show: false),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (value, meta) {
+                              if (value.toInt() >= 0 &&
+                                  value.toInt() <
+                                      _encaissementsParType.length) {
+                                return Transform.rotate(
+                                  angle: -0.785398,
+                                  child: Text(
+                                    _encaissementsParType[value.toInt()].type,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.labelSmall,
+                                  ),
+                                );
+                              }
+                              return const Text('');
+                            },
+                            reservedSize: 40,
+                          ),
+                        ),
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
                       ),
-                    )
-                    : Center(
-                      child: Text(
-                        'Aucune donnée historique',
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
+                      gridData: const FlGridData(show: false),
+                      borderData: FlBorderData(show: false),
                     ),
+                  )
+                : Center(
+                    child: Text(
+                      'Aucune donnée historique',
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -1790,13 +1830,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                           centerSpaceRadius: 40,
                           sections:
                               _occupationEtages.asMap().entries.map((entry) {
-                                return PieChartSectionData(
-                                  color: colors[entry.key % colors.length],
-                                  value: entry.value.taux,
-                                  title: '',
-                                  radius: 45,
-                                );
-                              }).toList(),
+                            return PieChartSectionData(
+                              color: colors[entry.key % colors.length],
+                              value: entry.value.taux,
+                              title: '',
+                              radius: 45,
+                            );
+                          }).toList(),
                         ),
                       ),
                       Container(
@@ -1821,9 +1861,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                               style: Theme.of(
                                 context,
                               ).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.success,
-                              ),
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.success,
+                                  ),
                             ),
                             Text(
                               'Total',
@@ -1841,61 +1881,59 @@ class _DashboardScreenState extends State<DashboardScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children:
-                        _occupationEtages.asMap().entries.map((entry) {
-                          return Container(
-                            margin: EdgeInsets.symmetric(vertical: 4),
-                            padding: EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppTheme.background,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: AppTheme.textLabel.withAlpha(26),
+                    children: _occupationEtages.asMap().entries.map((entry) {
+                      return Container(
+                        margin: EdgeInsets.symmetric(vertical: 4),
+                        padding: EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.background,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppTheme.textLabel.withAlpha(26),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: colors[entry.key % colors.length],
+                                borderRadius: BorderRadius.circular(2),
                               ),
                             ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 12,
-                                  height: 12,
-                                  decoration: BoxDecoration(
-                                    color: colors[entry.key % colors.length],
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                                SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        entry.value.etage,
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.labelMedium?.copyWith(
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    entry.value.etage,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.labelMedium?.copyWith(
                                           fontWeight: FontWeight.w600,
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      Text(
-                                        '${entry.value.taux.toInt()}%',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.labelMedium?.copyWith(
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    '${entry.value.taux.toInt()}%',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.labelMedium?.copyWith(
                                           fontWeight: FontWeight.bold,
                                           color:
                                               colors[entry.key % colors.length],
                                         ),
-                                      ),
-                                    ],
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          );
-                        }).toList(),
+                          ],
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ),
               ],
@@ -1932,10 +1970,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     int disponibles = floorData['disponibles'] ?? 0;
     Map<String, dynamic> types = floorData['types'] ?? {};
 
-    Color badgeColor =
-        percentage >= 90
-            ? AppTheme.success
-            : percentage >= 80
+    Color badgeColor = percentage >= 90
+        ? AppTheme.success
+        : percentage >= 80
             ? AppTheme.warning
             : AppTheme.error;
 
@@ -1957,8 +1994,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                 child: Text(
                   floorData['nom'] ?? floorKey,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
               ),
               Container(
@@ -1970,9 +2007,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                 child: Text(
                   '${percentage.toInt()}%',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: AppTheme.surface,
-                    fontWeight: FontWeight.bold,
-                  ),
+                        color: AppTheme.surface,
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
               ),
             ],
@@ -2002,75 +2039,73 @@ class _DashboardScreenState extends State<DashboardScreen>
             Padding(
               padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
               child: Column(
-                children:
-                    types.entries.map<Widget>((typeEntry) {
-                      String typeName = typeEntry.key;
-                      Map<String, dynamic> typeData =
-                          typeEntry.value as Map<String, dynamic>;
-                      int typeOccupes = typeData['occupes'] ?? 0;
-                      int typeTotal = typeData['total'] ?? 0;
-                      double typePercentage =
-                          typeTotal > 0 ? (typeOccupes / typeTotal) * 100 : 0;
+                children: types.entries.map<Widget>((typeEntry) {
+                  String typeName = typeEntry.key;
+                  Map<String, dynamic> typeData =
+                      typeEntry.value as Map<String, dynamic>;
+                  int typeOccupes = typeData['occupes'] ?? 0;
+                  int typeTotal = typeData['total'] ?? 0;
+                  double typePercentage =
+                      typeTotal > 0 ? (typeOccupes / typeTotal) * 100 : 0;
 
-                      return Container(
-                        margin: EdgeInsets.only(bottom: 8),
-                        padding: EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppTheme.background,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: AppTheme.textLabel.withAlpha(26),
+                  return Container(
+                    margin: EdgeInsets.only(bottom: 8),
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.background,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppTheme.textLabel.withAlpha(26),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '$typeName: $typeOccupes/$typeTotal',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              SizedBox(height: 4),
+                              LinearProgressIndicator(
+                                value: typePercentage / 100,
+                                backgroundColor:
+                                    AppTheme.secondary.withAlpha(51),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  AppTheme.secondary,
+                                ),
+                                minHeight: 4,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ],
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '$typeName: $typeOccupes/$typeTotal',
-                                    style:
-                                        Theme.of(context).textTheme.titleSmall,
-                                  ),
-                                  SizedBox(height: 4),
-                                  LinearProgressIndicator(
-                                    value: typePercentage / 100,
-                                    backgroundColor: AppTheme.secondary
-                                        .withAlpha(51),
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      AppTheme.secondary,
-                                    ),
-                                    minHeight: 4,
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            SizedBox(width: 12),
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.secondary.withAlpha(26),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                '${typePercentage.toInt()}%',
-                                style: Theme.of(
-                                  context,
-                                ).textTheme.labelMedium?.copyWith(
+                        SizedBox(width: 12),
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.secondary.withAlpha(26),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${typePercentage.toInt()}%',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.labelMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
                                   color: AppTheme.secondary,
                                 ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
-                      );
-                    }).toList(),
+                      ],
+                    ),
+                  );
+                }).toList(),
               ),
             ),
           ],
@@ -2147,15 +2182,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                       Text(
                         'Marché Cocody Saint Jean',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: AppTheme.surface,
-                          fontWeight: FontWeight.bold,
-                        ),
+                              color: AppTheme.surface,
+                              fontWeight: FontWeight.bold,
+                            ),
                       ),
                       Text(
                         'Gestion locative moderne',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppTheme.surface.withAlpha(204),
-                        ),
+                              color: AppTheme.surface.withAlpha(204),
+                            ),
                       ),
                     ],
                   ),
@@ -2270,10 +2305,9 @@ class _DashboardScreenState extends State<DashboardScreen>
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color:
-                  isSelected
-                      ? AppTheme.primary.withAlpha(26)
-                      : Colors.transparent,
+              color: isSelected
+                  ? AppTheme.primary.withAlpha(26)
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -2281,10 +2315,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                 Container(
                   padding: EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color:
-                        isSelected
-                            ? AppTheme.primary.withAlpha(51)
-                            : AppTheme.textLabel.withAlpha(26),
+                    color: isSelected
+                        ? AppTheme.primary.withAlpha(51)
+                        : AppTheme.textLabel.withAlpha(26),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -2299,11 +2332,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                   child: Text(
                     title,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color:
-                          isSelected ? AppTheme.primary : AppTheme.textPrimary,
-                      fontWeight:
-                          isSelected ? FontWeight.w600 : FontWeight.w500,
-                    ),
+                          color: isSelected
+                              ? AppTheme.primary
+                              : AppTheme.textPrimary,
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.w500,
+                        ),
                   ),
                 ),
                 if (isSelected)
@@ -2407,9 +2441,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       _showLoadingDialog('Génération du rapport des paiements en retard...');
 
       // Récupérer TOUS les paiements en retard sans restriction de période
-      final paiements = await _paiementsService.supabase
-          .from('paiements')
-          .select('''
+      final paiements =
+          await _paiementsService.supabase.from('paiements').select('''
           *,
           baux!inner(
             numero_contrat,
@@ -2417,9 +2450,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             commercants(nom, activite),
             locaux(numero)
           )
-        ''')
-          .eq('statut', 'En retard')
-          .order('date_echeance', ascending: true);
+        ''').eq('statut', 'En retard').order('date_echeance', ascending: true);
 
       Navigator.of(context).pop(); // Fermer le dialog de loading
 
@@ -2455,9 +2486,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       _showLoadingDialog('Génération du rapport des paiements en attente...');
 
       // Récupérer TOUS les paiements en attente sans restriction de période
-      final paiements = await _paiementsService.supabase
-          .from('paiements')
-          .select('''
+      final paiements =
+          await _paiementsService.supabase.from('paiements').select('''
           *,
           baux!inner(
             numero_contrat,
@@ -2465,9 +2495,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             commercants(nom, activite),
             locaux(numero)
           )
-        ''')
-          .eq('statut', 'En attente')
-          .order('date_echeance', ascending: true);
+        ''').eq('statut', 'En attente').order('date_echeance', ascending: true);
 
       Navigator.of(context).pop(); // Fermer le dialog de loading
 
