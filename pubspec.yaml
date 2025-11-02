@@ -19,7 +19,7 @@ dependencies:
   
   # Feature dependencies - safe to modify
   cached_network_image: ^3.3.1
-  connectivity_plus: ^6.1.4
+  connectivity_plus: ^7.0.0
   dio: ^5.4.0
   fluttertoast: ^8.2.4
   fl_chart: ^0.71.0
