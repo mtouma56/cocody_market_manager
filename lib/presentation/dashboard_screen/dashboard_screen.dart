@@ -308,21 +308,80 @@ class _DashboardScreenState extends State<DashboardScreen>
         });
       }
 
-      final results = await Future.wait([
-        _dashboardService.getDashboardStats(),
-        _dashboardService.getOccupationParEtage(),
-        _dashboardService.getTendancePaiements(7),
-        _dashboardService.getEncaissementsParType(),
-        _dashboardService.getStatsDetailleesEtages(),
-      ]);
+      // OPTIMISATION : Chargement séquentiel avec délai et timeout pour éviter "Connection reset by peer"
+      // Chaque requête a un timeout de 30 secondes et les erreurs sont gérées individuellement
 
+      // 1. Charger getDashboardStats() en premier (données essentielles)
+      DashboardStats? dashboardStats;
+      try {
+        dashboardStats = await _dashboardService.getDashboardStats()
+            .timeout(Duration(seconds: 30));
+        print('✅ Dashboard stats chargées');
+      } catch (e) {
+        print('❌ Erreur dashboard stats: $e');
+        // Continue même en cas d'erreur
+      }
+
+      // Délai de 200ms
+      await Future.delayed(Duration(milliseconds: 200));
+
+      // 2. Charger getOccupationParEtage()
+      List<OccupationEtage> occupationEtages = [];
+      try {
+        occupationEtages = await _dashboardService.getOccupationParEtage()
+            .timeout(Duration(seconds: 30));
+        print('✅ Occupation par étage chargée');
+      } catch (e) {
+        print('❌ Erreur occupation par étage: $e');
+      }
+
+      // Délai de 200ms
+      await Future.delayed(Duration(milliseconds: 200));
+
+      // 3. Charger getTendancePaiements()
+      List<TendanceData> tendancePaiements = [];
+      try {
+        tendancePaiements = await _dashboardService.getTendancePaiements(7)
+            .timeout(Duration(seconds: 30));
+        print('✅ Tendance paiements chargée');
+      } catch (e) {
+        print('❌ Erreur tendance paiements: $e');
+      }
+
+      // Délai de 200ms
+      await Future.delayed(Duration(milliseconds: 200));
+
+      // 4. Charger getEncaissementsParType()
+      List<EncaissementType> encaissementsParType = [];
+      try {
+        encaissementsParType = await _dashboardService.getEncaissementsParType()
+            .timeout(Duration(seconds: 30));
+        print('✅ Encaissements par type chargés');
+      } catch (e) {
+        print('❌ Erreur encaissements par type: $e');
+      }
+
+      // Délai de 200ms
+      await Future.delayed(Duration(milliseconds: 200));
+
+      // 5. Charger getStatsDetailleesEtages()
+      Map<String, Map<String, dynamic>> statsEtages = {};
+      try {
+        statsEtages = await _dashboardService.getStatsDetailleesEtages()
+            .timeout(Duration(seconds: 30));
+        print('✅ Stats détaillées étages chargées');
+      } catch (e) {
+        print('❌ Erreur stats détaillées étages: $e');
+      }
+
+      // Mettre à jour l'état avec toutes les données (même partielles)
       if (mounted) {
         setState(() {
-          _dashboardStats = results[0] as DashboardStats;
-          _occupationEtages = results[1] as List<OccupationEtage>;
-          _tendancePaiements = results[2] as List<TendanceData>;
-          _encaissementsParType = results[3] as List<EncaissementType>;
-          _statsEtages = results[4] as Map<String, Map<String, dynamic>>;
+          _dashboardStats = dashboardStats;
+          _occupationEtages = occupationEtages;
+          _tendancePaiements = tendancePaiements;
+          _encaissementsParType = encaissementsParType;
+          _statsEtages = statsEtages;
           if (silent) {
             _isRefreshing = false;
           } else {
@@ -335,6 +394,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       _fadeController.forward(from: 0);
       _scaleController.forward(from: 0);
     } catch (error) {
+      print('❌ Erreur globale lors du chargement: $error');
       if (mounted) {
         setState(() {
           if (silent) {
