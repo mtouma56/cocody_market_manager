@@ -297,6 +297,9 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<void> _loadData({bool silent = false}) async {
     try {
+      debugPrint('\n🔄 ========== DÉBUT CHARGEMENT DASHBOARD ==========');
+      debugPrint('🕐 Timestamp: ${DateTime.now().toIso8601String()}');
+
       if (mounted) {
         setState(() {
           if (silent) {
@@ -312,69 +315,124 @@ class _DashboardScreenState extends State<DashboardScreen>
       // Chaque requête a un timeout de 30 secondes et les erreurs sont gérées individuellement
 
       // 1. Charger getDashboardStats() en premier (données essentielles)
+      debugPrint('\n🔍 [1/5] Starting getDashboardStats()...');
+      final statsStartTime = DateTime.now();
       DashboardStats? dashboardStats;
       try {
         dashboardStats = await _dashboardService.getDashboardStats()
             .timeout(Duration(seconds: 30));
-        print('✅ Dashboard stats chargées');
-      } catch (e) {
-        print('❌ Erreur dashboard stats: $e');
+        final statsElapsed = DateTime.now().difference(statsStartTime).inMilliseconds;
+        debugPrint('✅ [1/5] getDashboardStats() SUCCESS (${statsElapsed}ms)');
+        debugPrint('   📊 Total locaux: ${dashboardStats.totalLocaux}');
+        debugPrint('   📊 Taux occupation: ${dashboardStats.tauxOccupation.toStringAsFixed(1)}%');
+        debugPrint('   💰 Encaissements jour: ${dashboardStats.encaissements} FCFA');
+        debugPrint('   🔴 Impayés: ${dashboardStats.impayes} FCFA');
+      } catch (e, stackTrace) {
+        final statsElapsed = DateTime.now().difference(statsStartTime).inMilliseconds;
+        debugPrint('❌ [1/5] getDashboardStats() FAILED after ${statsElapsed}ms');
+        debugPrint('   Error: $e');
+        debugPrint('   StackTrace: ${stackTrace.toString().split('\n').take(3).join('\n')}');
         // Continue même en cas d'erreur
       }
 
       // Délai de 200ms
+      debugPrint('⏸️  Waiting 200ms before next request...');
       await Future.delayed(Duration(milliseconds: 200));
 
       // 2. Charger getOccupationParEtage()
+      debugPrint('\n🔍 [2/5] Starting getOccupationParEtage()...');
+      final occupationStartTime = DateTime.now();
       List<OccupationEtage> occupationEtages = [];
       try {
         occupationEtages = await _dashboardService.getOccupationParEtage()
             .timeout(Duration(seconds: 30));
-        print('✅ Occupation par étage chargée');
-      } catch (e) {
-        print('❌ Erreur occupation par étage: $e');
+        final occupationElapsed = DateTime.now().difference(occupationStartTime).inMilliseconds;
+        debugPrint('✅ [2/5] getOccupationParEtage() SUCCESS (${occupationElapsed}ms)');
+        debugPrint('   📊 Nombre d\'étages: ${occupationEtages.length}');
+        for (var etage in occupationEtages) {
+          debugPrint('   🏢 ${etage.etage}: ${etage.occupes}/${etage.total} (${etage.taux.toStringAsFixed(1)}%)');
+        }
+      } catch (e, stackTrace) {
+        final occupationElapsed = DateTime.now().difference(occupationStartTime).inMilliseconds;
+        debugPrint('❌ [2/5] getOccupationParEtage() FAILED after ${occupationElapsed}ms');
+        debugPrint('   Error: $e');
+        debugPrint('   StackTrace: ${stackTrace.toString().split('\n').take(3).join('\n')}');
       }
 
       // Délai de 200ms
+      debugPrint('⏸️  Waiting 200ms before next request...');
       await Future.delayed(Duration(milliseconds: 200));
 
       // 3. Charger getTendancePaiements()
+      debugPrint('\n🔍 [3/5] Starting getTendancePaiements(7)...');
+      final tendanceStartTime = DateTime.now();
       List<TendanceData> tendancePaiements = [];
       try {
         tendancePaiements = await _dashboardService.getTendancePaiements(7)
             .timeout(Duration(seconds: 30));
-        print('✅ Tendance paiements chargée');
-      } catch (e) {
-        print('❌ Erreur tendance paiements: $e');
+        final tendanceElapsed = DateTime.now().difference(tendanceStartTime).inMilliseconds;
+        debugPrint('✅ [3/5] getTendancePaiements() SUCCESS (${tendanceElapsed}ms)');
+        debugPrint('   📊 Nombre de jours: ${tendancePaiements.length}');
+        for (var data in tendancePaiements) {
+          debugPrint('   📅 ${data.date.toString().split(' ')[0]}: ${data.montant.toStringAsFixed(2)}M FCFA');
+        }
+      } catch (e, stackTrace) {
+        final tendanceElapsed = DateTime.now().difference(tendanceStartTime).inMilliseconds;
+        debugPrint('❌ [3/5] getTendancePaiements() FAILED after ${tendanceElapsed}ms');
+        debugPrint('   Error: $e');
+        debugPrint('   StackTrace: ${stackTrace.toString().split('\n').take(3).join('\n')}');
       }
 
       // Délai de 200ms
+      debugPrint('⏸️  Waiting 200ms before next request...');
       await Future.delayed(Duration(milliseconds: 200));
 
       // 4. Charger getEncaissementsParType()
+      debugPrint('\n🔍 [4/5] Starting getEncaissementsParType()...');
+      final encaissementsStartTime = DateTime.now();
       List<EncaissementType> encaissementsParType = [];
       try {
         encaissementsParType = await _dashboardService.getEncaissementsParType()
             .timeout(Duration(seconds: 30));
-        print('✅ Encaissements par type chargés');
-      } catch (e) {
-        print('❌ Erreur encaissements par type: $e');
+        final encaissementsElapsed = DateTime.now().difference(encaissementsStartTime).inMilliseconds;
+        debugPrint('✅ [4/5] getEncaissementsParType() SUCCESS (${encaissementsElapsed}ms)');
+        debugPrint('   📊 Nombre de types: ${encaissementsParType.length}');
+        for (var type in encaissementsParType) {
+          debugPrint('   💰 ${type.type}: ${type.montant.toStringAsFixed(2)}M FCFA');
+        }
+      } catch (e, stackTrace) {
+        final encaissementsElapsed = DateTime.now().difference(encaissementsStartTime).inMilliseconds;
+        debugPrint('❌ [4/5] getEncaissementsParType() FAILED after ${encaissementsElapsed}ms');
+        debugPrint('   Error: $e');
+        debugPrint('   StackTrace: ${stackTrace.toString().split('\n').take(3).join('\n')}');
       }
 
       // Délai de 200ms
+      debugPrint('⏸️  Waiting 200ms before next request...');
       await Future.delayed(Duration(milliseconds: 200));
 
       // 5. Charger getStatsDetailleesEtages()
+      debugPrint('\n🔍 [5/5] Starting getStatsDetailleesEtages()...');
+      final statsDetailleesStartTime = DateTime.now();
       Map<String, Map<String, dynamic>> statsEtages = {};
       try {
         statsEtages = await _dashboardService.getStatsDetailleesEtages()
             .timeout(Duration(seconds: 30));
-        print('✅ Stats détaillées étages chargées');
-      } catch (e) {
-        print('❌ Erreur stats détaillées étages: $e');
+        final statsDetailleesElapsed = DateTime.now().difference(statsDetailleesStartTime).inMilliseconds;
+        debugPrint('✅ [5/5] getStatsDetailleesEtages() SUCCESS (${statsDetailleesElapsed}ms)');
+        debugPrint('   📊 Nombre d\'étages détaillés: ${statsEtages.length}');
+        for (var entry in statsEtages.entries) {
+          debugPrint('   🏢 ${entry.key}: ${entry.value['occupes']}/${entry.value['total']} locaux');
+        }
+      } catch (e, stackTrace) {
+        final statsDetailleesElapsed = DateTime.now().difference(statsDetailleesStartTime).inMilliseconds;
+        debugPrint('❌ [5/5] getStatsDetailleesEtages() FAILED after ${statsDetailleesElapsed}ms');
+        debugPrint('   Error: $e');
+        debugPrint('   StackTrace: ${stackTrace.toString().split('\n').take(3).join('\n')}');
       }
 
       // Mettre à jour l'état avec toutes les données (même partielles)
+      debugPrint('\n📦 Updating UI state...');
       if (mounted) {
         setState(() {
           _dashboardStats = dashboardStats;
@@ -388,13 +446,20 @@ class _DashboardScreenState extends State<DashboardScreen>
             _isLoading = false;
           }
         });
+        debugPrint('✅ UI state updated successfully');
       }
 
       // Restart animations after each refresh to keep the dashboard lively
       _fadeController.forward(from: 0);
       _scaleController.forward(from: 0);
-    } catch (error) {
-      print('❌ Erreur globale lors du chargement: $error');
+
+      debugPrint('🎉 ========== FIN CHARGEMENT DASHBOARD (SUCCESS) ==========\n');
+    } catch (error, stackTrace) {
+      debugPrint('\n💥 ========== ERREUR GLOBALE DASHBOARD ==========');
+      debugPrint('❌ Error: $error');
+      debugPrint('❌ StackTrace: $stackTrace');
+      debugPrint('💥 ========== FIN CHARGEMENT DASHBOARD (FAILED) ==========\n');
+
       if (mounted) {
         setState(() {
           if (silent) {
@@ -560,6 +625,14 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildDashboardContent() {
+    // AMÉLIORATION: Afficher le Dashboard même avec des données partielles
+    // Si aucune donnée n'est disponible, afficher un message approprié
+    final hasAnyData = _dashboardStats != null ||
+                       _occupationEtages.isNotEmpty ||
+                       _tendancePaiements.isNotEmpty ||
+                       _encaissementsParType.isNotEmpty ||
+                       _statsEtages.isNotEmpty;
+
     return FadeTransition(
       opacity: _fadeAnimation,
       child: ScaleTransition(
@@ -600,6 +673,29 @@ class _DashboardScreenState extends State<DashboardScreen>
                           )
                         : const SizedBox(key: ValueKey('idle'), height: 0),
                   ),
+                  // Afficher un message si certaines données ne sont pas chargées
+                  if (!hasAnyData)
+                    Container(
+                      padding: EdgeInsets.all(16),
+                      margin: EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warning.withAlpha(26),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.warning.withAlpha(77)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: AppTheme.warning),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Certaines données n\'ont pas pu être chargées. Tirez pour rafraîchir.',
+                              style: TextStyle(color: AppTheme.textPrimary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   if (_dashboardStats != null) ...[
                     AnimatedDashboardHero(
                       stats: _dashboardStats!,
