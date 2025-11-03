@@ -45,11 +45,14 @@ void main() async {
     debugPrint('❌ Failed to initialize sync service: $e');
   }
 
+  // 🔧 DEBUG TEST: Désactiver la sync automatique au démarrage
+  // pour identifier si c'est la cause du crash "Something went wrong"
   // Sync initiale si en ligne
   try {
     if (ConnectivityService().isOnline) {
-      SyncService().syncAll();
-      debugPrint('✅ Initial sync started');
+      // TEMPORAIREMENT DÉSACTIVÉ POUR DEBUG
+      // SyncService().syncAll();
+      debugPrint('⚠️ DEBUG: Initial sync DISABLED for testing');
     } else {
       debugPrint('📡 Starting in offline mode');
     }
