@@ -98,11 +98,12 @@ class _LoginScreenState extends State<LoginScreen> {
         // Save email for next login
         await _saveEmail(email);
 
-        // Navigate to dashboard
+        // 🔧 DEBUG TEST: Navigate to properties to bypass Dashboard
+        // Original: '/dashboard-screen'
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(
             context,
-            '/dashboard-screen',
+            '/properties',
             (route) => false,
           );
         }
@@ -137,13 +138,14 @@ class _LoginScreenState extends State<LoginScreen> {
       // Simulate biometric authentication
       await Future.delayed(const Duration(seconds: 1));
 
-      // Success - navigate to dashboard
+      // 🔧 DEBUG TEST: Navigate to properties to bypass Dashboard
+      // Original: '/dashboard-screen'
       HapticFeedback.mediumImpact();
 
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(
           context,
-          '/dashboard-screen',
+          '/properties',
           (route) => false,
         );
       }
