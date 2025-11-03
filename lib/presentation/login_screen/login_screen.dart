@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sizer/sizer.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/app_export.dart';
 import './widgets/app_logo_widget.dart';
@@ -64,6 +65,35 @@ class _LoginScreenState extends State<LoginScreen> {
           _mockCredentials[email] == password) {
         // Success - trigger haptic feedback
         HapticFeedback.mediumImpact();
+
+        // 🔧 FIX: Verify Supabase initialization for mock login
+        // The RLS policies allow public SELECT access, so no auth is needed for reading
+        // But we need to ensure Supabase is properly initialized
+        try {
+          final supabase = Supabase.instance.client;
+
+          // Test if Supabase is accessible by making a simple query
+          debugPrint('🔍 Testing Supabase connection...');
+          final testQuery = await supabase.from('etages').select('id').limit(1);
+          debugPrint('✅ Supabase is accessible - found ${testQuery.length} etage(s)');
+          debugPrint('📝 Mock login successful - RLS public policies allow data access');
+        } catch (supabaseError) {
+          // This is the likely cause of "Something went wrong"
+          debugPrint('❌ CRITICAL: Supabase connection failed: $supabaseError');
+          debugPrint('💡 Make sure to run: flutter run --dart-define-from-file=env.json');
+
+          // Show error to user
+          if (mounted) {
+            setState(() {
+              _errorMessage =
+                'Erreur de configuration Supabase.\n'
+                'Assurez-vous que l\'app est lancée avec:\n'
+                'flutter run --dart-define-from-file=env.json';
+              _isLoading = false;
+            });
+            return;
+          }
+        }
 
         // Save email for next login
         await _saveEmail(email);
