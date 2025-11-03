@@ -10,8 +10,14 @@ class DashboardService {
 
   Future<DashboardStats> getDashboardStats() async {
     try {
+      print('\n🔍 [getDashboardStats] Starting...');
+
       // 1. COUNT LOCAUX
+      print('   🔍 [getDashboardStats] Querying locaux table...');
+      final locauxStartTime = DateTime.now();
       final locauxResponse = await _supabase.from('locaux').select('*');
+      final locauxElapsed = DateTime.now().difference(locauxStartTime).inMilliseconds;
+      print('   ✅ [getDashboardStats] Locaux query completed in ${locauxElapsed}ms (${locauxResponse.length} rows)');
 
       final total = locauxResponse.length;
       final occupes =
@@ -22,12 +28,16 @@ class DashboardService {
       final tauxOccupation = total > 0 ? (occupes / total) * 100 : 0.0;
 
       print(
-          '📊 Locaux - Total: $total, Occupés: $occupes, Disponibles: $disponibles');
+          '   📊 [getDashboardStats] Locaux - Total: $total, Occupés: $occupes, Disponibles: $disponibles');
 
       // 2. RÉCUPÉRATION DE TOUS LES PAIEMENTS - SUPABASE INTÉGRATION RÉELLE
+      print('   🔍 [getDashboardStats] Querying paiements table...');
+      final paiementsStartTime = DateTime.now();
       final paiementsResponse = await _supabase.from('paiements').select('*');
+      final paiementsElapsed = DateTime.now().difference(paiementsStartTime).inMilliseconds;
+      print('   ✅ [getDashboardStats] Paiements query completed in ${paiementsElapsed}ms (${paiementsResponse.length} rows)');
 
-      print('📊 Total paiements récupérés: ${paiementsResponse.length}');
+      print('   📊 [getDashboardStats] Total paiements récupérés: ${paiementsResponse.length}');
 
       // 3. CALCUL DES ENCAISSEMENTS ET IMPAYÉS - VERSION CORRIGÉE AVEC DONNÉES RÉELLES
       final aujourdhui = DateTime.now();
@@ -119,10 +129,15 @@ class DashboardService {
           '🔴 Impayés: ${impayes.toStringAsFixed(0)} FCFA (${bailsImpayes.length} contrats)');
 
       // 4. COMMERÇANTS
+      print('   🔍 [getDashboardStats] Querying commercants table...');
+      final commercantsStartTime = DateTime.now();
       final commercantsResponse =
           await _supabase.from('commercants').select('*');
+      final commercantsElapsed = DateTime.now().difference(commercantsStartTime).inMilliseconds;
+      print('   ✅ [getDashboardStats] Commercants query completed in ${commercantsElapsed}ms (${commercantsResponse.length} rows)');
       final commercantsTotal = commercantsResponse.length;
 
+      print('✅ [getDashboardStats] Completed successfully');
       return DashboardStats(
         totalLocaux: total,
         occupes: occupes,
@@ -137,8 +152,10 @@ class DashboardService {
         commercantsActifs: commercantsTotal - inactifs,
         commercantsTotal: commercantsTotal,
       );
-    } catch (e) {
-      print('❌ ERREUR getDashboardStats: $e');
+    } catch (e, stackTrace) {
+      print('\n❌ [getDashboardStats] CRITICAL ERROR');
+      print('   Error: $e');
+      print('   StackTrace: ${stackTrace.toString().split('\n').take(5).join('\n')}');
       rethrow;
     }
   }
@@ -146,12 +163,24 @@ class DashboardService {
   /// Récupère l'occupation par étage
   Future<List<OccupationEtage>> getOccupationParEtage() async {
     try {
+      print('\n🔍 [getOccupationParEtage] Starting...');
+
+      print('   🔍 [getOccupationParEtage] Querying etages table...');
+      final etagesStartTime = DateTime.now();
       final etagesResponse =
           await _supabase.from('etages').select('*').order('ordre');
+      final etagesElapsed = DateTime.now().difference(etagesStartTime).inMilliseconds;
+      print('   ✅ [getOccupationParEtage] Etages query completed in ${etagesElapsed}ms (${etagesResponse.length} rows)');
+
+      print('   🔍 [getOccupationParEtage] Querying locaux table...');
+      final locauxStartTime = DateTime.now();
       final locauxResponse = await _supabase.from('locaux').select('*');
+      final locauxElapsed = DateTime.now().difference(locauxStartTime).inMilliseconds;
+      print('   ✅ [getOccupationParEtage] Locaux query completed in ${locauxElapsed}ms (${locauxResponse.length} rows)');
 
       List<OccupationEtage> result = [];
 
+      print('   🔍 [getOccupationParEtage] Processing ${etagesResponse.length} etages...');
       for (var etage in etagesResponse) {
         final etageId = etage['id'];
         final etageNom = etage['nom'];
@@ -173,9 +202,12 @@ class DashboardService {
         ));
       }
 
+      print('✅ [getOccupationParEtage] Completed successfully (${result.length} etages)');
       return result;
-    } catch (e) {
-      print('❌ ERREUR getOccupationParEtage: $e');
+    } catch (e, stackTrace) {
+      print('\n❌ [getOccupationParEtage] CRITICAL ERROR');
+      print('   Error: $e');
+      print('   StackTrace: ${stackTrace.toString().split('\n').take(5).join('\n')}');
       rethrow;
     }
   }
@@ -183,10 +215,16 @@ class DashboardService {
   /// Récupère la tendance des paiements sur les derniers jours
   Future<List<TendanceData>> getTendancePaiements(int nbJours) async {
     try {
+      print('\n🔍 [getTendancePaiements] Starting (nbJours: $nbJours)...');
+
       final aujourdhui = DateTime.now();
       final il7Jours = aujourdhui.subtract(Duration(days: 6));
 
+      print('   🔍 [getTendancePaiements] Querying paiements table...');
+      final paiementsStartTime = DateTime.now();
       final paiementsResponse = await _supabase.from('paiements').select('*');
+      final paiementsElapsed = DateTime.now().difference(paiementsStartTime).inMilliseconds;
+      print('   ✅ [getTendancePaiements] Paiements query completed in ${paiementsElapsed}ms (${paiementsResponse.length} rows)');
 
       // Grouper par date
       Map<String, double> groupes = {};
@@ -236,14 +274,19 @@ class DashboardService {
         });
       }
 
-      return groupes.entries
+      final result = groupes.entries
           .map((e) => TendanceData(
                 date: DateTime.parse(e.key),
                 montant: e.value / 1000000, // Convert to millions
               ))
           .toList();
-    } catch (e) {
-      print('❌ ERREUR getTendancePaiements: $e');
+
+      print('✅ [getTendancePaiements] Completed successfully (${result.length} days)');
+      return result;
+    } catch (e, stackTrace) {
+      print('\n❌ [getTendancePaiements] CRITICAL ERROR');
+      print('   Error: $e');
+      print('   StackTrace: ${stackTrace.toString().split('\n').take(5).join('\n')}');
       rethrow;
     }
   }
@@ -251,7 +294,11 @@ class DashboardService {
   /// Récupère les encaissements par type de local
   Future<List<EncaissementType>> getEncaissementsParType() async {
     try {
+      print('\n🔍 [getEncaissementsParType] Starting...');
+
       // Récupère tous les paiements avec leurs relations
+      print('   🔍 [getEncaissementsParType] Querying paiements with joins (paiements → baux → locaux → types_locaux)...');
+      final paiementsStartTime = DateTime.now();
       final paiementsResponse = await _supabase.from('paiements').select('''
           *,
           baux!inner(
@@ -260,6 +307,8 @@ class DashboardService {
             )
           )
         ''');
+      final paiementsElapsed = DateTime.now().difference(paiementsStartTime).inMilliseconds;
+      print('   ✅ [getEncaissementsParType] Paiements join query completed in ${paiementsElapsed}ms (${paiementsResponse.length} rows)');
 
       Map<String, double> groupes = {};
 
@@ -274,14 +323,21 @@ class DashboardService {
         }
       }
 
-      return groupes.entries
+      final result = groupes.entries
           .map((e) => EncaissementType(
                 type: e.key,
                 montant: e.value / 1000000, // Convert to millions
               ))
           .toList();
-    } catch (e) {
-      print('❌ ERREUR getEncaissementsParType: $e');
+
+      print('✅ [getEncaissementsParType] Completed successfully (${result.length} types)');
+      return result;
+    } catch (e, stackTrace) {
+      print('\n❌ [getEncaissementsParType] CRITICAL ERROR');
+      print('   Error: $e');
+      print('   StackTrace: ${stackTrace.toString().split('\n').take(5).join('\n')}');
+      print('   ⚠️  Returning mock data as fallback');
+
       // En cas d'erreur, retourner données mock
       return [
         EncaissementType(type: 'Boutique 9m²', montant: 28.5),
@@ -295,18 +351,41 @@ class DashboardService {
   }
 
   /// Récupère les statistiques détaillées par étage avec types de locaux
+  /// OPTIMISATION: Requête unique au lieu de N+1 queries
   Future<Map<String, Map<String, dynamic>>> getStatsDetailleesEtages() async {
     try {
+      print('\n🔍 [getStatsDetailleesEtages] Starting (OPTIMIZED VERSION)...');
+
+      print('   🔍 [getStatsDetailleesEtages] Querying etages table...');
+      final etagesStartTime = DateTime.now();
       final etagesData =
           await _supabase.from('etages').select('id, nom').order('ordre');
+      final etagesElapsed = DateTime.now().difference(etagesStartTime).inMilliseconds;
+      print('   ✅ [getStatsDetailleesEtages] Etages query completed in ${etagesElapsed}ms (${etagesData.length} rows)');
+
+      // OPTIMISATION: Récupérer TOUS les locaux en une seule requête au lieu de boucler
+      print('   🔍 [getStatsDetailleesEtages] Querying ALL locaux with join in ONE query (OPTIMIZED)...');
+      final allLocauxStartTime = DateTime.now();
+      final allLocaux = await _supabase.from('locaux').select('''
+            id,
+            etage_id,
+            statut,
+            types_locaux!inner(nom)
+          ''').eq('actif', true);
+      final allLocauxElapsed = DateTime.now().difference(allLocauxStartTime).inMilliseconds;
+      print('   ✅ [getStatsDetailleesEtages] All locaux query completed in ${allLocauxElapsed}ms (${allLocaux.length} rows)');
+      print('   ⚡ OPTIMIZATION: Replaced ${etagesData.length} separate queries with 1 query!');
 
       Map<String, Map<String, dynamic>> statsEtages = {};
 
-      for (var etage in etagesData) {
-        final locauxEtage = await _supabase.from('locaux').select('''
-              statut,
-              types_locaux!inner(nom)
-            ''').eq('etage_id', etage['id']).eq('actif', true);
+      print('   🔍 [getStatsDetailleesEtages] Processing ${etagesData.length} etages in memory...');
+      for (var i = 0; i < etagesData.length; i++) {
+        var etage = etagesData[i];
+        final etageId = etage['id'];
+        final etageNom = etage['nom'];
+
+        // Filtrer les locaux de cet étage en mémoire (très rapide)
+        final locauxEtage = allLocaux.where((l) => l['etage_id'] == etageId).toList();
 
         int total = locauxEtage.length;
         int occupes = locauxEtage.where((l) => l['statut'] == 'Occupé').length;
@@ -328,18 +407,24 @@ class DashboardService {
           }
         }
 
-        statsEtages[etage['nom']] = {
-          'nom': etage['nom'],
+        statsEtages[etageNom] = {
+          'nom': etageNom,
           'tauxOccupation': tauxOccupation,
           'occupes': occupes,
           'disponibles': disponibles,
           'total': total,
           'types': typesStats,
         };
+
+        print('      ✅ [getStatsDetailleesEtages] Processed ${etageNom}: ${occupes}/${total} (${tauxOccupation.toStringAsFixed(1)}%)');
       }
 
+      print('✅ [getStatsDetailleesEtages] Completed successfully (${statsEtages.length} etages) - OPTIMIZED!');
       return statsEtages;
-    } catch (error) {
+    } catch (error, stackTrace) {
+      print('\n❌ [getStatsDetailleesEtages] CRITICAL ERROR');
+      print('   Error: $error');
+      print('   StackTrace: ${stackTrace.toString().split('\n').take(5).join('\n')}');
       throw Exception(
           'Erreur lors de la récupération des statistiques détaillées: $error');
     }
